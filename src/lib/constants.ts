@@ -67,3 +67,13 @@ export const RGAP = 16;
 export const BAND = 170;
 export const STUB = 26;
 export const MINDROP = 46;
+
+/** Half-width of the widest relationship pill (the ⚮ capsule is 38 wide). */
+export const PILL_HALF_W = 19;
+/** Breathing room between a pill edge and the tag edge it sits next to. */
+export const PILL_CLEAR = 4;
+/**
+ * Smallest horizontal gap between two tags that still lets the pill sit
+ * between them. Below this the union connector wraps around the outside.
+ */
+export const UNION_MIN_GAP = (PILL_HALF_W + PILL_CLEAR) * 2;

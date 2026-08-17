@@ -1,4 +1,11 @@
-import { ALIGN_TH, BAND, GRID, RGAP } from './constants.ts';
+import {
+  ALIGN_TH,
+  BAND,
+  GRID,
+  RGAP,
+  STUB,
+  UNION_MIN_GAP,
+} from './constants.ts';
 import type {
   BuildRectsResult,
   Edge,
@@ -196,7 +203,12 @@ export function snapHousehold(
   return { gx, gy };
 }
 
-/** Spouse union geometry — sideways connector with ring at midpoint. */
+/**
+ * Spouse union geometry. The connector is ALWAYS sideways: it leaves a tag
+ * through its left or right edge and enters the relationship pill through the
+ * pill's left or right edge. Height differences are absorbed by vertical jogs
+ * that stay clear of both tags and of the pill.
+ */
 export function unionGeom(a: SimNode, b: SimNode): UnionGeom {
   const L = a.x <= b.x ? a : b;
   const R = a.x <= b.x ? b : a;
@@ -206,11 +218,34 @@ export function unionGeom(a: SimNode, b: SimNode): UnionGeom {
   const ey = R.y + R.h / 2;
   const rx = (sx + ex) / 2;
   const ry = (sy + ey) / 2;
-  const S = Math.max(14, Math.min(26, (ex - sx) / 2 - 14));
-  const lx = rx - S;
-  const rxx = rx + S;
-  const pts = `${sx},${sy} ${lx},${sy} ${lx},${ry} ${rx},${ry} ${rxx},${ry} ${rxx},${ey} ${ex},${ey}`;
-  return { sx, sy, ex, ey, rx, ry, pts };
+  const gap = ex - sx;
+
+  if (gap >= UNION_MIN_GAP) {
+    // The tags face each other with room to spare, so the pill drops straight
+    // into the gap: out of L's right edge, into the pill's left edge, out of
+    // the pill's right edge, into R's left edge.
+    const S = Math.max(14, Math.min(26, gap / 2 - 14));
+    const lx = rx - S;
+    const rxx = rx + S;
+    const pts = `${sx},${sy} ${lx},${sy} ${lx},${ry} ${rx},${ry} ${rxx},${ry} ${rxx},${ey} ${ex},${ey}`;
+    return { sx, sy, ex, ey, rx, ry, pts };
+  }
+
+  // The tags overlap horizontally (typically stacked), so there is no gap to
+  // sit in. Wrap around the outside instead: the upper tag leaves its right
+  // edge and enters the pill's right edge, and the pill's left edge runs out
+  // and back into the lower tag's left edge. Both vertical jogs stay outside
+  // every tag, so nothing is ever entered from the top or bottom.
+  const T = sy <= ey ? L : R;
+  const B = sy <= ey ? R : L;
+  const tx = T.x + T.w;
+  const ty = T.y + T.h / 2;
+  const bx = B.x;
+  const by = B.y + B.h / 2;
+  const outR = Math.max(L.x + L.w, R.x + R.w) + STUB;
+  const outL = Math.min(L.x, R.x) - STUB;
+  const pts = `${tx},${ty} ${outR},${ty} ${outR},${ry} ${rx},${ry} ${outL},${ry} ${outL},${by} ${bx},${by}`;
+  return { sx: tx, sy: ty, ex: bx, ey: by, rx, ry, pts };
 }
 
 export function bbox(

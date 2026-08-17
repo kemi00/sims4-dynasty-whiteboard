@@ -117,20 +117,24 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     return () => el.removeEventListener('wheel', onWheel);
   }, [stageRef, svgRef, wb]);
 
+  // Fit once, as soon as the stage has been laid out. Later resizes must not
+  // refit, or they would throw away whatever the user has zoomed or panned to.
+  const didFit = useRef(false);
   useEffect(() => {
     const el = stageRef.current;
-    if (!el) return;
-    const fitNow = () => {
+    if (!el || didFit.current) return;
+    const tryFit = () => {
+      if (didFit.current) return;
       const r = svgRef.current?.getBoundingClientRect();
-      if (r?.width && r.height) wb.fit(r.width, r.height);
+      if (!r?.width || !r.height) return;
+      didFit.current = true;
+      wb.fit(r.width, r.height);
     };
-    const ro = new ResizeObserver(fitNow);
+    tryFit();
+    if (didFit.current) return;
+    const ro = new ResizeObserver(tryFit);
     ro.observe(el);
-    window.addEventListener('resize', fitNow);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', fitNow);
-    };
+    return () => ro.disconnect();
   }, [stageRef, svgRef, wb.fit]);
 
   const userEdgeIds = useRef(new Set<string>());
