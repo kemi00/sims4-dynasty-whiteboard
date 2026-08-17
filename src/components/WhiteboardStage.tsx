@@ -12,6 +12,8 @@ import type { SimNode } from '../types/whiteboard.ts';
 import { ConnectMenu } from './ConnectMenu.tsx';
 import { EdgeLayer } from './EdgeLayer.tsx';
 import { GroupLayer } from './GroupLayer.tsx';
+import { Hint } from './Hint.tsx';
+import { Legend } from './Legend.tsx';
 import { SimEditor } from './SimEditor.tsx';
 import { SimNodeView } from './SimNode.tsx';
 import { WorldLayer } from './WorldLayer.tsx';
@@ -110,14 +112,20 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
   }, [stageRef, svgRef, wb]);
 
   useEffect(() => {
-    const fitOnce = () => {
+    const el = stageRef.current;
+    if (!el) return;
+    const fitNow = () => {
       const r = svgRef.current?.getBoundingClientRect();
-      if (r?.width) wb.fit(r.width, r.height);
+      if (r?.width && r.height) wb.fit(r.width, r.height);
     };
-    fitOnce();
-    window.addEventListener('resize', fitOnce);
-    return () => window.removeEventListener('resize', fitOnce);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const ro = new ResizeObserver(fitNow);
+    ro.observe(el);
+    window.addEventListener('resize', fitNow);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', fitNow);
+    };
+  }, [stageRef, svgRef, wb.fit]);
 
   const userEdgeIds = useRef(new Set<string>());
   userEdgeIds.current = new Set(wb.edges.filter(isUserE).map((e) => e.id));
@@ -408,6 +416,8 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
           }}
         />
       )}
+      <Legend worlds={wb.worlds} />
+      <Hint />
       {editNode && (
         <SimEditor
           node={editNode}

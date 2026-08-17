@@ -3,8 +3,6 @@ import './App.css';
 import { AgesPanel } from './components/AgesPanel.tsx';
 import { GamesPanel } from './components/GamesPanel.tsx';
 import { Header } from './components/Header.tsx';
-import { Hint } from './components/Hint.tsx';
-import { Legend } from './components/Legend.tsx';
 import { Toolbar } from './components/Toolbar.tsx';
 import { WhiteboardStage } from './components/WhiteboardStage.tsx';
 import { useWhiteboard } from './hooks/useWhiteboard.ts';
@@ -77,8 +75,6 @@ export default function App() {
       <Header />
       <Toolbar wb={wb} svgRef={svgRef} />
       <WhiteboardStage wb={wb} svgRef={svgRef} stageRef={stageRef} />
-      <Legend worlds={wb.worlds} />
-      <Hint />
       {wb.gamesOpen && (
         <div ref={gamesPanelRef}>
           <GamesPanel
