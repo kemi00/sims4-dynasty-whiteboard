@@ -2,48 +2,131 @@
 *{box-sizing:border-box}
 html,body,#root{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1b2b3a;overflow:hidden}
 #root,#app{display:flex;flex-direction:column;height:100%;min-height:0}
-header{background:linear-gradient(135deg,#15324f 0%,#22507a 100%);color:#fff;padding:11px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;box-shadow:0 1px 5px #0003;position:relative;z-index:5}
-header .brand{display:flex;align-items:center;gap:11px}
-header .plumbob{width:15px;height:23px;flex:0 0 auto;filter:drop-shadow(0 2px 2px #0005)}
-header .ttl{display:flex;flex-direction:column;line-height:1.2}
-header h1{font-size:15px;margin:0;font-weight:800;letter-spacing:.2px}
-header .sub{font-size:11px;opacity:.8;font-weight:500}
-#tools{background:linear-gradient(#fbf8f0,#f5f0e4);border-bottom:1px solid #e7dfcd;padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;box-shadow:0 2px 9px #00000012;position:relative;z-index:4}
-button,.chip{padding:6px 11px;border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;color:#3b4757;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:5px;line-height:1;transition:background .12s ease,color .12s ease,box-shadow .12s ease,transform .06s ease}
-.grp{display:flex;align-items:center;gap:3px;background:#fff;border:1px solid #e9e1cf;border-radius:11px;padding:3px;box-shadow:0 1px 2px #00000012}
-.grp button,.grp .chip{border:none}
-button:hover,.chip:hover{background:#eef1f4}
-button:active{transform:translateY(1px)}
-button.on{background:#e7f0fd;color:#1560c4}
-#btnConnect{background:#1b6cd6;color:#fff;box-shadow:0 1px 3px #1b6cd655}
-#btnConnect:hover{background:#155bb8}
-#btnConnect.on{background:#0f9d58;box-shadow:0 1px 3px #0f9d5866}
-#btnDel:hover{background:#fdecec;color:#c23b2f}
-#tools .grow{flex:1 1 0;min-width:8px}
-#tools input[type=search]{padding:7px 10px 7px 30px;border:1px solid #e0d8c6;border-radius:9px;font-size:12px;width:160px;background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239a917c' stroke-width='2.4' stroke-linecap='round'><circle cx='11' cy='11' r='7'/><line x1='20' y1='20' x2='16.65' y2='16.65'/></svg>") no-repeat 9px center;transition:border-color .12s,box-shadow .12s}
-#tools input[type=search]:focus{outline:none;border-color:#1b6cd6;box-shadow:0 0 0 3px #1b6cd626}
-/* responsive: get denser as the window narrows so the toolbar wraps to fewer, tidier rows */
-@media (max-width:1000px){ header .sub{display:none} header{padding:9px 16px} }
-@media (max-width:900px){
- #tools{padding:7px 9px;gap:6px}
- #tools button,#tools .chip{padding:6px 8px;font-size:11.5px;gap:4px}
- #tools .grp{gap:2px;padding:2px;border-radius:9px}
- #tools input[type=search]{width:140px}
+/* Base for the panels floating over the canvas. Deliberately scoped: the top
+   bar owns .tool and must not inherit any of this. */
+.gpanel button,.menu button,.editor button,.agechips button{padding:6px 11px;border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;color:#3b4757;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:5px;line-height:1;transition:background .12s ease,color .12s ease,box-shadow .12s ease,transform .06s ease}
+.gpanel button:hover,.menu button:hover,.editor button:hover,.agechips button:hover{background:#eef1f4}
+.gpanel button:active,.menu button:active,.editor button:active,.agechips button:active{transform:translateY(1px)}
+.gpanel button:focus-visible,.menu button:focus-visible,.editor button:focus-visible,.agechips button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-ring)}
+
+/* ── chrome tokens ─────────────────────────────────────────────────────────
+   Radius scale: 8px on anything you click, 12px on floating surfaces,
+   full pill on badges. Nested containers use child radius + their padding.
+   One accent (--accent) marks primary action and every "not the default"
+   state. Nothing else on the chrome introduces a colour.                    */
+:root{
+ --bar-h:52px;
+ --r-control:8px;
+ --r-surface:12px;
+ --accent:#1b6cd6;
+ --accent-strong:#155bb8;
+ --accent-soft:#e9f1fd;
+ --accent-soft-hi:#dbe8fb;
+ --accent-ring:#1b6cd63d;
+ --ink:#1b2b3a;
+ --ink-2:#5a6675;
+ --ink-3:#697380;
+ --chrome:#fffdf9;
+ --recess:#f3efe4;
+ --line:#e7e1d3;
+ --rule:#d9d1bf;
+ --hover:#f1eee4;
+ --danger:#b8352a;
+ --danger-soft:#fceceb;
+ --lift:0 6px 20px #1b2b3a1f;
 }
-@media (max-width:560px){
- header h1{font-size:14px}
- #tools input[type=search]{flex:1 1 120px;width:auto;min-width:0}
- #tools button,#tools .chip{padding:6px 7px;font-size:11px}
+
+/* ── top bar ─────────────────────────────────────────────────────────────── */
+.appbar{flex:0 0 auto;height:var(--bar-h);display:flex;align-items:center;gap:5px;padding:0 10px 0 13px;background:var(--chrome);border-bottom:1px solid var(--line);position:relative;z-index:5}
+.brand{display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.brand .plumbob{width:14px;height:21px;flex:0 0 auto}
+.brand__name{font-size:13px;font-weight:600;letter-spacing:-.1px;color:var(--ink);white-space:nowrap}
+.appbar__rule{width:1px;height:22px;background:var(--rule);margin:0 6px;flex:0 0 auto}
+.appbar__spacer{flex:1 1 auto;min-width:10px}
+
+/* ── the one control ─────────────────────────────────────────────────────── */
+.tool{height:32px;padding:0 10px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid transparent;border-radius:var(--r-control);background:transparent;color:var(--ink-2);font:inherit;font-size:12.5px;font-weight:600;line-height:1;white-space:nowrap;cursor:pointer;transition:background .13s ease,color .13s ease,box-shadow .13s ease}
+.tool--icon{width:32px;padding:0}
+.tool svg{width:17px;height:17px;flex:0 0 auto}
+.tool:hover:not(:disabled){background:var(--hover);color:var(--ink)}
+.tool:active:not(:disabled){background:var(--line)}
+.tool:disabled{opacity:.42;cursor:default}
+.tool:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-ring)}
+.tool__count{min-width:17px;height:17px;padding:0 5px;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* Accent marks a mode that changes what your next action does, or a filter
+   that is currently narrowing the board. Never the default state. */
+.tool[data-pressed=true]{background:var(--accent-soft);color:var(--accent-strong)}
+.tool[data-pressed=true]:hover{background:var(--accent-soft-hi);color:var(--accent-strong)}
+
+/* primary action: solid. Armed adds a ring rather than a second colour. */
+.tool[data-tone=primary]{background:var(--accent);color:#fff;padding:0 12px}
+.tool[data-tone=primary]:hover:not(:disabled),.tool[data-tone=primary]:active:not(:disabled){background:var(--accent-strong);color:#fff}
+.tool[data-tone=primary][data-pressed=true]{background:var(--accent-strong);color:#fff;box-shadow:0 0 0 3px var(--accent-ring)}
+.tool[data-tone=primary][data-pressed=true]:focus-visible{box-shadow:0 0 0 3px var(--accent-ring),0 0 0 5px #1b6cd626}
+
+/* destructive: reads neutral until you reach for it */
+.tool[data-tone=danger]:hover:not(:disabled){background:var(--danger-soft);color:var(--danger)}
+
+/* ── segmented layer toggles ─────────────────────────────────────────────── */
+.segment{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:10px;background:var(--recess);border:1px solid #e9e3d5;flex:0 0 auto}
+.segment .tool[data-pressed=true]{background:#fff;color:var(--ink);box-shadow:0 1px 2px #1b2b3a1a}
+.segment .tool[data-pressed=false]{background:transparent;color:#79828f}
+.segment .tool:hover{background:#ffffffb3;color:var(--ink)}
+.segment .tool:focus-visible{box-shadow:0 0 0 2px var(--accent-ring)}
+
+/* ── search ──────────────────────────────────────────────────────────────── */
+.search{position:relative;display:flex;align-items:center;flex:0 1 190px;min-width:34px}
+.search__icon{position:absolute;left:9px;width:15px;height:15px;color:var(--ink-3);pointer-events:none}
+.search input{width:100%;height:32px;padding:0 10px 0 29px;border:1px solid var(--line);border-radius:var(--r-control);background:#fff;color:var(--ink);font:inherit;font-size:12.5px;transition:border-color .13s ease,box-shadow .13s ease}
+.search input::placeholder{color:var(--ink-3)}
+.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
+.search input::-webkit-search-cancel-button{cursor:pointer}
+
+/* ── overflow menu ───────────────────────────────────────────────────────── */
+.overflow{position:relative;flex:0 0 auto}
+.pop{position:absolute;top:calc(100% + 7px);right:0;min-width:186px;padding:6px;background:#fff;border:1px solid var(--line);border-radius:var(--r-surface);box-shadow:var(--lift);z-index:30}
+.pop button{display:flex;align-items:center;gap:10px;width:100%;height:33px;padding:0 9px;border:none;border-radius:var(--r-control);background:transparent;color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;text-align:left;cursor:pointer}
+.pop button svg{width:16px;height:16px;color:var(--ink-3);flex:0 0 auto}
+.pop button:hover{background:var(--hover)}
+.pop button:hover svg{color:var(--ink-2)}
+.pop button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-ring)}
+
+/* ── floating view controls ──────────────────────────────────────────────── */
+.viewctl{position:absolute;right:12px;bottom:12px;z-index:6;display:flex;align-items:center;gap:2px;padding:4px;background:var(--chrome);border:1px solid var(--line);border-radius:var(--r-surface);box-shadow:var(--lift)}
+.viewctl__rule{width:1px;height:20px;background:var(--rule);margin:0 3px;flex:0 0 auto}
+.viewctl__zoom{min-width:46px;text-align:center;font-size:11.5px;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+/* Narrow windows shed the wordmark, then padding, then labels, so the bar keeps
+   every control on one line. Measured minimum at the last step is 467px. */
+@media (max-width:1100px){ .brand__name{display:none} }
+@media (max-width:1000px){
+ .appbar{gap:4px;padding:0 8px 0 10px}
+ .appbar__rule{margin:0 4px}
+ .tool{padding:0 8px;gap:5px}
+ .tool[data-tone=primary]{padding:0 10px}
+}
+@media (max-width:820px){
+ .tool__label{display:none}
+ .tool{width:32px;padding:0}
+ .search{flex-basis:150px}
+}
+@media (prefers-reduced-motion:reduce){
+ .tool,.search input,.gpanel button,.menu button,.editor button,.agechips button{transition:none}
+ .gpanel button:active,.menu button:active,.editor button:active,.agechips button:active{transform:none}
 }
 #stage{position:relative;flex:1;min-height:0;overflow:hidden;background:radial-gradient(circle at 1px 1px,#dcd6c7 1px,transparent 0) 0 0/24px 24px,#f4f1e8}
 svg{width:100%;height:100%;display:block;touch-action:none}
-#hint{position:absolute;left:12px;bottom:12px;background:#fffdf8f5;border:1px solid #e5dfd0;border-radius:9px;padding:10px 26px 10px 12px;font-size:11px;max-width:300px;box-shadow:0 4px 12px #0002;line-height:1.5}
-#hintClose{position:absolute;top:5px;right:6px;width:18px;height:18px;line-height:1;border:none;background:#eee7d6;color:#7a6f56;border-radius:50%;font-size:11px;cursor:pointer;padding:0}
+#hint{position:absolute;left:12px;bottom:12px;background:#fffdf8f5;border:1px solid var(--line);border-radius:var(--r-surface);padding:10px 26px 10px 12px;font-size:11px;max-width:300px;box-shadow:var(--lift);line-height:1.5}
+#hintClose{position:absolute;top:5px;right:6px;width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;border:none;background:#eee7d6;color:#7a6f56;border-radius:50%;cursor:pointer;padding:0}
+#hintClose svg{width:12px;height:12px}
 #hintClose:hover{background:#e0d8c2}
-#hintIcon{position:absolute;left:12px;bottom:12px;width:34px;height:34px;border-radius:50%;border:1px solid #d8cfb8;background:#fffdf8;color:#1b3a5b;font-size:19px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 3px 10px #0002;padding:0}
-#hintIcon:hover{background:#f2ece0}
-#status{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:#1b3a5b;color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;display:none}
-#legend{position:absolute;right:10px;top:10px;background:#fffdf8f2;border:1px solid #e5dfd0;border-radius:10px;padding:8px 10px;font-size:10px;max-height:80vh;overflow:auto;box-shadow:0 4px 12px #0002;width:150px}
+#hintIcon{position:absolute;left:12px;bottom:12px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--chrome);color:var(--ink-2);cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:var(--lift);padding:0}
+#hintIcon svg{width:18px;height:18px}
+#hintIcon:hover{background:var(--hover);color:var(--ink)}
+#status{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:6px 13px;border-radius:999px;font-size:12px;font-weight:600;box-shadow:var(--lift);display:none}
+/* Height is capped so a long legend never reaches the floating view controls. */
+#legend{position:absolute;right:12px;top:12px;background:#fffdf8f2;border:1px solid var(--line);border-radius:var(--r-surface);padding:8px 10px;font-size:10px;max-height:calc(100% - 84px);overflow:auto;box-shadow:var(--lift);width:150px}
 #legend h3{margin:0 0 4px;font-size:9px;letter-spacing:.4px;text-transform:uppercase;color:#8a7f63}
 .lg{display:flex;align-items:center;gap:5px;margin:1.5px 0}
 .lg i{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
@@ -51,9 +134,9 @@ svg{width:100%;height:100%;display:block;touch-action:none}
 .node.sel>rect:first-of-type{stroke:#1b6cd6!important;stroke-width:4.5px!important;fill:#e9f2ff!important}
 .node.sel{filter:drop-shadow(0 0 0 #1b6cd6) drop-shadow(0 0 7px rgba(27,108,214,.9))}
 .edge.sel .hit{stroke:#1b6cd6}
-.menu,.editor{position:absolute;background:#fff;border:1px solid #cdd3da;border-radius:9px;box-shadow:0 8px 24px #0003;padding:6px;z-index:20;font-size:12px;display:none}
+.menu,.editor{position:absolute;background:#fff;border:1px solid #cdd3da;border-radius:var(--r-surface);box-shadow:0 8px 24px #0003;padding:6px;z-index:20;font-size:12px;display:none}
 .menu button{display:block;width:100%;text-align:left;margin:2px 0;border:none;background:#f5f6f8}
-.gpanel{position:fixed;z-index:60;background:#fff;border:1px solid #e5dfd0;border-radius:12px;box-shadow:0 12px 34px #0003;padding:9px;font-size:12px;max-height:74vh;overflow:auto;width:256px;display:none}
+.gpanel{position:fixed;z-index:60;background:#fff;border:1px solid var(--line);border-radius:var(--r-surface);box-shadow:0 12px 34px #0003;padding:9px;font-size:12px;max-height:74vh;overflow:auto;width:256px;display:none}
 .gpanel .gph{display:flex;justify-content:space-between;align-items:center;margin:2px 4px 8px;font-size:11px;color:#5a6673}
 .gpanel .gph span{display:flex;gap:5px}
 .gpanel .gph button{padding:3px 8px;font-size:11px;border:1px solid #e0d8c6;background:#faf7f0;color:#3b4757;border-radius:7px;font-weight:600}

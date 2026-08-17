@@ -16,6 +16,7 @@ import { Hint } from './Hint.tsx';
 import { Legend } from './Legend.tsx';
 import { SimEditor } from './SimEditor.tsx';
 import { SimNodeView } from './SimNode.tsx';
+import { ViewControls } from './ViewControls.tsx';
 import { WorldLayer } from './WorldLayer.tsx';
 
 type Props = {
@@ -436,6 +437,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
       )}
       <Legend worlds={wb.worlds} />
       <Hint />
+      <ViewControls wb={wb} svgRef={svgRef} />
       {editNode && (
         <SimEditor
           node={editNode}
