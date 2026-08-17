@@ -117,25 +117,33 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     return () => el.removeEventListener('wheel', onWheel);
   }, [stageRef, svgRef, wb]);
 
-  // Fit once, as soon as the stage has been laid out. Later resizes must not
-  // refit, or they would throw away whatever the user has zoomed or panned to.
-  const didFit = useRef(false);
+  // Fit exactly once, as soon as the stage has been laid out. This must not
+  // depend on wb.fit: that identity changes on every node edit, and observing
+  // again would refit mid-drag (ResizeObserver fires on observe) and throw away
+  // whatever the user had zoomed or panned to.
+  const fitRef = useRef(wb.fit);
+  fitRef.current = wb.fit;
   useEffect(() => {
     const el = stageRef.current;
-    if (!el || didFit.current) return;
-    const tryFit = () => {
-      if (didFit.current) return;
+    if (!el) return;
+    const measure = () => {
       const r = svgRef.current?.getBoundingClientRect();
-      if (!r?.width || !r.height) return;
-      didFit.current = true;
-      wb.fit(r.width, r.height);
+      return r?.width && r.height ? r : null;
     };
-    tryFit();
-    if (didFit.current) return;
-    const ro = new ResizeObserver(tryFit);
+    const first = measure();
+    if (first) {
+      fitRef.current(first.width, first.height);
+      return;
+    }
+    const ro = new ResizeObserver(() => {
+      const r = measure();
+      if (!r) return;
+      ro.disconnect();
+      fitRef.current(r.width, r.height);
+    });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [stageRef, svgRef, wb.fit]);
+  }, [stageRef, svgRef]);
 
   const userEdgeIds = useRef(new Set<string>());
   userEdgeIds.current = new Set(wb.edges.filter(isUserE).map((e) => e.id));
