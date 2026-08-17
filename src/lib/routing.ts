@@ -244,7 +244,7 @@ export function childRoute(
   const ts = top - STUB;
   const { rbands, fastRoute } = ctx;
   if (fastRoute) {
-    if (ts > ay + 8) {
+    if (ts >= ay) {
       return simplify([
         [ax, ay],
         [ax, ts],
@@ -261,7 +261,9 @@ export function childRoute(
     ]);
   }
   const exNoChild = [...ex].filter((id) => id !== child.id);
-  if (ts > ay + 8) {
+  // Equality matters: a fork that already sits exactly on the child's lane
+  // still routes straight across, and simplify() drops the zero-length stem.
+  if (ts >= ay) {
     const pts: Point[] = [
       [ax, ay],
       [ax, ts],
@@ -530,7 +532,11 @@ export function computeEdgeRenderData(
     const belowK = kn.filter((n) => n.y > ay + STUB);
     const sideK = kn.filter((n) => !(n.y > ay + STUB));
     if (belowK.length) {
-      const forkY = ay + MINDROP;
+      // The shared trunk must stop at or above the shallowest child's entry
+      // lane. Dropping the full MINDROP past it would force that child's route
+      // to climb back up, doubling the connector back on itself.
+      const laneTop = Math.min(...belowK.map((n) => n.y - STUB));
+      const forkY = Math.min(ay + MINDROP, laneTop);
       BLOOD.push({
         ids: belowK.length === 1 ? pEB[belowK[0]!.id] || [] : [],
         pts: [
