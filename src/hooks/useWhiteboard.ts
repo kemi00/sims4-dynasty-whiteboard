@@ -1,9 +1,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import seedData from '../data/whiteboard.json';
 import { AGES_H, UEDIT } from '../lib/constants.ts';
-import { bbox, guidesFor, snapHousehold, snapNode } from '../lib/geometry.ts';
+import {
+  bbox,
+  snapHouseholdDelta,
+  snapPosition,
+  type SnapSticky,
+} from '../lib/geometry.ts';
+import { computeLayout, layoutBases } from '../lib/layout.ts';
 import { bloodVerts, computeEdgeRenderData, hopD } from '../lib/routing.ts';
-import { worldColor } from '../lib/utils.ts';
+import { fileStamp, migrateWhiteboardData, sanitizeEdges, siblingsShareParents, worldColor } from '../lib/utils.ts';
 import type {
   ConnSrc,
   Edge,
@@ -18,19 +24,26 @@ import type {
 
 const INITIAL_VIEW: Viewport = { tx: 40, ty: 40, k: 0.72 };
 
+/** Strip derived geometry — only semantic fields and drag offsets are persisted. */
+function toCore(n: SimNode): SimNode {
+  const { x, y, w, h, ...rest } = n;
+  return { ...rest, ox: rest.ox ?? 0, oy: rest.oy ?? 0, x: 0, y: 0, w: 0, h: 0 };
+}
+
 export function useWhiteboard() {
   const data = seedData as WhiteboardData;
-  const [nodes, setNodes] = useState<SimNode[]>(() =>
-    data.nodes.map((n) => ({ ...n })),
+  const [nodesCore, setNodesCore] = useState<SimNode[]>(() =>
+    data.nodes.map((n) => toCore(n)),
   );
   const [edges, setEdges] = useState<Edge[]>(() =>
-    data.edges.map((e) => ({ ...e })),
+    sanitizeEdges(data.edges.map((e) => ({ ...e }))),
   );
   const [groups, setGroups] = useState<Group[]>(() =>
     data.groups.map((g) => ({ ...g })),
   );
   const [worlds] = useState<World[]>(data.worlds);
   const [hiddenPacks, setHiddenPacks] = useState<Set<string>>(new Set());
+  const [hiddenPlay, setHiddenPlay] = useState<Set<string>>(new Set());
   const [show, setShow] = useState<ShowToggles>({
     seed: true,
     groups: true,
@@ -47,6 +60,7 @@ export function useWhiteboard() {
   const [editNodeId, setEditNodeId] = useState<string | null>(null);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [agesOpen, setAgesOpen] = useState(false);
+  const [playOpen, setPlayOpen] = useState(false);
   const [connectMenu, setConnectMenu] = useState<{
     a: string;
     b: string;
@@ -54,6 +68,12 @@ export function useWhiteboard() {
     y: number;
   } | null>(null);
   const eidcRef = useRef(100000);
+
+  /** Positions and card sizes are derived on every render from layout rules. */
+  const nodes = useMemo(
+    () => computeLayout(nodesCore, worlds, edges),
+    [nodesCore, worlds, edges],
+  );
 
   const byid = useMemo(() => {
     const m: Record<string, SimNode> = {};
@@ -68,6 +88,17 @@ export function useWhiteboard() {
     [hiddenPacks],
   );
 
+  const playVis = useCallback(
+    (n: SimNode) => !!n && !hiddenPlay.has(n.oplay),
+    [hiddenPlay],
+  );
+
+  /** Combined pack + playability visibility for canvas rendering. */
+  const nodeVis = useCallback(
+    (n: SimNode) => packVis(n) && playVis(n),
+    [packVis, playVis],
+  );
+
   const edgeData = useMemo(
     () =>
       computeEdgeRenderData({
@@ -75,10 +106,10 @@ export function useWhiteboard() {
         edges,
         groups,
         show,
-        packVis,
+        packVis: nodeVis,
         fastRoute,
       }),
-    [nodes, edges, groups, show, packVis, fastRoute],
+    [nodes, edges, groups, show, nodeVis, fastRoute],
   );
 
   const bloodVertsMemo = useMemo(
@@ -87,8 +118,13 @@ export function useWhiteboard() {
   );
 
   const visibleNodes = useMemo(
-    () => nodes.filter(packVis),
-    [nodes, packVis],
+    () => nodes.filter(nodeVis),
+    [nodes, nodeVis],
+  );
+
+  const liveWorlds = useMemo(
+    () => new Set(visibleNodes.map((n) => n.world)),
+    [visibleNodes],
   );
 
   const toggleShow = useCallback((key: keyof ShowToggles) => {
@@ -131,14 +167,17 @@ export function useWhiteboard() {
   const clearSel = useCallback(() => setSel(null), []);
 
   const addEdge = useCallback((a: string, b: string, type: Edge['type']) => {
-    const id = 'u' + eidcRef.current++;
-    setEdges((e) => [...e, { id, a, b, type }]);
+    setEdges((e) => {
+      if (type === 'sibling' && siblingsShareParents(a, b, e)) return e;
+      const id = 'u' + eidcRef.current++;
+      return sanitizeEdges([...e, { id, a, b, type }]);
+    });
   }, []);
 
   const deleteSelected = useCallback(() => {
     if (!sel) return;
     if (sel.type === 'node') {
-      setNodes((ns) => ns.filter((n) => n.id !== sel.id));
+      setNodesCore((ns) => ns.filter((n) => n.id !== sel.id));
       setEdges((es) =>
         es.filter((e) => e.a !== sel.id && e.b !== sel.id),
       );
@@ -149,51 +188,73 @@ export function useWhiteboard() {
     setSel(null);
   }, [sel, editNodeId]);
 
-  const addSim = useCallback((wx: number, wy: number) => {
+  const addSim = useCallback((_wx: number, _wy: number) => {
     const id = 'new' + eidcRef.current++;
+    const world = 'Other';
+    const hh = '(added)';
     const n: SimNode = {
       id,
-      gid: '',
+      gid: `${world}||${hh}`,
       first: 'New',
       sur: 'Sim',
       age: 'Young Adult',
       state: 'Sim',
       gender: '-',
-      hh: '(added)',
-      world: '',
+      hh,
+      world,
       nb: '-',
-      color: '#9aa0a6',
+      color: worldColor(world, worlds),
       townie: false,
-      oworld: '',
+      oworld: world,
       onb: '-',
-      ohh: '(added)',
+      ohh: hh,
       oplay: 'Resident',
       pack: '',
-      x: Math.round(wx),
-      y: Math.round(wy),
+      ox: 0,
+      oy: 0,
+      x: 0,
+      y: 0,
       w: 200,
-      h: 52,
+      h: 66,
       added: true,
     };
-    setNodes((ns) => [...ns, n]);
+    setNodesCore((ns) => [...ns, toCore(n)]);
     setSel({ type: 'node', id });
-  }, []);
+  }, [worlds]);
 
-  const updateNode = useCallback(
-    (id: string, patch: Partial<SimNode>) => {
-      setNodes((ns) =>
-        ns.map((n) => (n.id === id ? { ...n, ...patch } : n)),
-      );
-    },
-    [],
-  );
+  const updateNode = useCallback((id: string, patch: Partial<SimNode>) => {
+    setNodesCore((ns) =>
+      ns.map((n) => {
+        if (n.id !== id) return n;
+        const next: SimNode = { ...n, ...patch };
+        if (patch.x !== undefined || patch.y !== undefined) {
+          const base = layoutBases(ns, worlds, edges).get(id);
+          if (base) {
+            const absX =
+              patch.x !== undefined ? patch.x : base.x + (n.ox ?? 0);
+            const absY =
+              patch.y !== undefined ? patch.y : base.y + (n.oy ?? 0);
+            next.ox = absX - base.x;
+            next.oy = absY - base.y;
+          }
+        }
+        return toCore(next);
+      }),
+    );
+  }, [worlds, edges]);
 
   const moveNodesByGid = useCallback(
-    (gid: string, dx: number, dy: number, base: Record<string, { x: number; y: number }>) => {
-      setNodes((ns) =>
+    (
+      gid: string,
+      dx: number,
+      dy: number,
+      base: Record<string, { ox: number; oy: number }>,
+    ) => {
+      setNodesCore((ns) =>
         ns.map((n) => {
           const bb = base[n.id];
-          if (n.gid === gid && bb) return { ...n, x: bb.x + dx, y: bb.y + dy };
+          if (n.gid === gid && bb)
+            return { ...n, ox: bb.ox + dx, oy: bb.oy + dy };
           return n;
         }),
       );
@@ -202,11 +263,17 @@ export function useWhiteboard() {
   );
 
   const moveNodesByWorld = useCallback(
-    (world: string, dx: number, dy: number, base: Record<string, { x: number; y: number }>) => {
-      setNodes((ns) =>
+    (
+      world: string,
+      dx: number,
+      dy: number,
+      base: Record<string, { ox: number; oy: number }>,
+    ) => {
+      setNodesCore((ns) =>
         ns.map((n) => {
           const bb = base[n.id];
-          if (n.world === world && bb) return { ...n, x: bb.x + dx, y: bb.y + dy };
+          if (n.world === world && bb)
+            return { ...n, ox: bb.ox + dx, oy: bb.oy + dy };
           return n;
         }),
       );
@@ -214,12 +281,23 @@ export function useWhiteboard() {
     [],
   );
 
+  const snapDragPosition = useCallback(
+    (n: SimNode, rawX: number, rawY: number, sticky: SnapSticky = { x: null, y: null }) =>
+      snapPosition(rawX, rawY, n.w, n.h, nodes, n.id, snap, sticky),
+    [snap, nodes],
+  );
+
+  const snapHouseholdDrag = useCallback(
+    (gid: string, dx: number, dy: number) =>
+      snapHouseholdDelta(gid, nodes, dx, dy, snap),
+    [snap, nodes],
+  );
+
   const snapNodeAction = useCallback(
     (n: SimNode) => {
       if (!snap) return;
-      const copy = { ...n };
-      snapNode(copy, nodes);
-      updateNode(n.id, { x: copy.x, y: copy.y });
+      const { x, y } = snapPosition(n.x, n.y, n.w, n.h, nodes, n.id, true);
+      updateNode(n.id, { x, y });
     },
     [snap, nodes, updateNode],
   );
@@ -310,7 +388,7 @@ export function useWhiteboard() {
   );
 
   const fit = useCallback((svgWidth: number, svgHeight: number) => {
-    const [x0, y0, x1, y1] = bbox(nodes, packVis);
+    const [x0, y0, x1, y1] = bbox(nodes, nodeVis);
     const w = x1 - x0;
     const h = y1 - y0;
     const k = Math.min(svgWidth / (w + 120), svgHeight / (h + 120), 1.1);
@@ -319,7 +397,41 @@ export function useWhiteboard() {
       tx: (svgWidth - w * k) / 2 - x0 * k,
       ty: (svgHeight - h * k) / 2 - y0 * k,
     });
-  }, [nodes, packVis]);
+  }, [nodes, nodeVis]);
+
+  /**
+   * Frame a single world. Two differences from `fit`: the zoom cap is above 1 so
+   * picking a small world magnifies it rather than just recentring the board,
+   * and `insetRight` keeps the result clear of the legend panel, which would
+   * otherwise cover the right edge of the very world that was just clicked.
+   */
+  const zoomToWorld = useCallback(
+    (
+      world: string,
+      svgWidth: number,
+      svgHeight: number,
+      insetRight: number = 0,
+    ) => {
+      const inWorld = (n: SimNode) => nodeVis(n) && n.world === world;
+      if (!nodes.some(inWorld)) return;
+      const [x0, y0, x1, y1] = bbox(nodes, inWorld);
+      const w = x1 - x0;
+      const h = y1 - y0;
+      const pad = 80;
+      const availW = Math.max(svgWidth - insetRight, 240);
+      const k = Math.min(
+        availW / (w + pad * 2),
+        svgHeight / (h + pad * 2),
+        1.4,
+      );
+      setViewport({
+        k,
+        tx: (availW - w * k) / 2 - x0 * k,
+        ty: (svgHeight - h * k) / 2 - y0 * k,
+      });
+    },
+    [nodes, nodeVis],
+  );
 
   const resetView = useCallback(() => setViewport(INITIAL_VIEW), []);
 
@@ -346,7 +458,7 @@ export function useWhiteboard() {
       if (!query) return;
       const hit = nodes.find(
         (n) =>
-          packVis(n) &&
+          nodeVis(n) &&
           `${n.first} ${n.sur}`.toLowerCase().includes(query),
       );
       if (!hit) return;
@@ -358,14 +470,20 @@ export function useWhiteboard() {
       });
       setSel({ type: 'node', id: hit.id });
     },
-    [nodes, packVis],
+    [nodes, nodeVis],
   );
 
   const saveJson = useCallback(() => {
     const blob = new Blob(
       [
         JSON.stringify(
-          { nodes, edges, groups, hiddenPacks: [...hiddenPacks] },
+          {
+            nodes: nodesCore.map(toCore),
+            edges,
+            groups,
+            hiddenPacks: [...hiddenPacks],
+            hiddenPlay: [...hiddenPlay],
+          },
           null,
           1,
         ),
@@ -374,20 +492,21 @@ export function useWhiteboard() {
     );
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'sims4_whiteboard.json';
+    a.download = `sims4_dynasties_${fileStamp()}.json`;
     a.click();
-  }, [nodes, edges, groups, hiddenPacks]);
+  }, [nodesCore, edges, groups, hiddenPacks, hiddenPlay]);
 
   const loadJson = useCallback(
     (file: File, svgWidth: number, svgHeight: number) => {
       const rd = new FileReader();
       rd.onload = () => {
         try {
-          const d = JSON.parse(rd.result as string);
-          setNodes(d.nodes);
-          setEdges(d.edges);
+          const d = migrateWhiteboardData(JSON.parse(rd.result as string));
+          setNodesCore((d.nodes as SimNode[]).map(toCore));
+          setEdges(sanitizeEdges(d.edges));
           if (d.groups) setGroups(d.groups);
           setHiddenPacks(new Set(d.hiddenPacks || []));
+          setHiddenPlay(new Set(d.hiddenPlay || []));
           setSel(null);
           setEditNodeId(null);
           setTimeout(() => fit(svgWidth, svgHeight), 0);
@@ -402,7 +521,7 @@ export function useWhiteboard() {
 
   const exportPng = useCallback(
     (svgEl: SVGSVGElement) => {
-      const [x0, y0, x1, y1] = bbox(nodes, packVis);
+      const [x0, y0, x1, y1] = bbox(nodes, nodeVis);
       const pad = 40;
       const W = x1 - x0 + pad * 2;
       const H = y1 - y0 + pad * 2;
@@ -440,7 +559,7 @@ export function useWhiteboard() {
           if (!b) return;
           const a = document.createElement('a');
           a.href = URL.createObjectURL(b);
-          a.download = 'sims4_whiteboard.png';
+          a.download = `sims4_dynasties_${fileStamp()}.png`;
           a.click();
         });
       };
@@ -448,7 +567,7 @@ export function useWhiteboard() {
         'data:image/svg+xml;base64,' +
         btoa(unescape(encodeURIComponent(xml)));
     },
-    [nodes, packVis],
+    [nodes, nodeVis],
   );
 
   const togglePack = useCallback((pack: string, visible: boolean) => {
@@ -504,7 +623,8 @@ export function useWhiteboard() {
           hh: name,
           world,
           color: worldColor(world, worlds),
-          x: n.x + 280,
+          ox: 0,
+          oy: 0,
         };
         if (n.added) {
           patch.oworld = world;
@@ -523,11 +643,9 @@ export function useWhiteboard() {
           hh: g.hh,
           world: g.world,
           color: g.color,
+          ox: 0,
+          oy: 0,
         };
-        if (mem.length) {
-          patch.x = Math.max(...mem.map((m) => m.x + m.w)) + 40;
-          patch.y = Math.min(...mem.map((m) => m.y));
-        }
         if (n.added) {
           patch.oworld = g.world;
           patch.ohh = g.hh;
@@ -543,12 +661,29 @@ export function useWhiteboard() {
     [byid, groups, nodes, updateNode, worlds],
   );
 
+  const togglePlay = useCallback((oplay: string, visible: boolean) => {
+    setHiddenPlay((s) => {
+      const next = new Set(s);
+      if (visible) next.delete(oplay);
+      else next.add(oplay);
+      return next;
+    });
+  }, []);
+
   const packs = useMemo(
     () =>
       [...new Set(nodes.map((n) => n.pack).filter(Boolean))].sort((a, b) =>
         a === 'Base Game' ? -1 : b === 'Base Game' ? 1 : a.localeCompare(b),
       ),
     [nodes],
+  );
+
+  const playabilities = useMemo(
+    () =>
+      [...new Set(nodesCore.map((n) => n.oplay).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [nodesCore],
   );
 
   const isSelLink = useCallback(
@@ -563,6 +698,7 @@ export function useWhiteboard() {
     groups,
     worlds,
     hiddenPacks,
+    hiddenPlay,
     show,
     viewport,
     sel,
@@ -578,15 +714,21 @@ export function useWhiteboard() {
     setGamesOpen,
     agesOpen,
     setAgesOpen,
+    playOpen,
+    setPlayOpen,
     connectMenu,
     setConnectMenu,
     byid,
     packVis,
+    playVis,
+    nodeVis,
     edgeData,
     bloodVerts: bloodVertsMemo,
     hopD,
     visibleNodes,
+    liveWorlds,
     packs,
+    playabilities,
     UEDIT,
     AGES_H,
     toggleShow,
@@ -601,11 +743,14 @@ export function useWhiteboard() {
     updateNode,
     moveNodesByGid,
     moveNodesByWorld,
+    snapDragPosition,
+    snapHouseholdDrag,
     snapNodeAction,
     handleConnectClick,
     handleConnectUnion,
     confirmConnect,
     fit,
+    zoomToWorld,
     resetView,
     zoomAt,
     searchSim,
@@ -613,6 +758,8 @@ export function useWhiteboard() {
     loadJson,
     exportPng,
     togglePack,
+    togglePlay,
+    setHiddenPlay,
     toggleAge,
     setHiAges,
     setHiddenPacks,
@@ -622,8 +769,6 @@ export function useWhiteboard() {
     setStatus,
     setFastRoute,
     setViewport,
-    guidesFor: (n: SimNode) => guidesFor(n, nodes),
-    snapHousehold: (gid: string) => snapHousehold(gid, nodes, snap),
   };
 }
 

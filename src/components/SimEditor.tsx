@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { AGES, LIFE_STATES } from '../lib/constants.ts';
+import { useEffect, useState, type RefObject } from 'react';
+import { AGES, LIFE_STATES, PLAYABILITY } from '../lib/constants.ts';
 import type { Group, SimNode, World } from '../types/whiteboard.ts';
 
 type Props = {
@@ -9,8 +9,16 @@ type Props = {
   nodes: SimNode[];
   left: number;
   top: number;
-  onSave: (patch: { first: string; sur: string; age: string; state: string }) => void;
+  editorRef: RefObject<HTMLDivElement | null>;
+  onSave: (patch: {
+    first: string;
+    sur: string;
+    age: string;
+    state: string;
+    oplay: string;
+  }) => void;
   onMove: (world: string, houseGid: string | '__new', newName?: string) => void;
+  onLayout: () => void;
   onClose: () => void;
 };
 
@@ -21,13 +29,16 @@ export function SimEditor({
   nodes,
   left,
   top,
+  editorRef,
   onSave,
   onMove,
+  onLayout,
   onClose,
 }: Props) {
   const [name, setName] = useState(`${n.first} ${n.sur}`);
   const [age, setAge] = useState(n.age);
   const [state, setState] = useState(n.state || 'Sim');
+  const [oplay, setOplay] = useState(n.oplay || 'Resident');
   const [moveOpen, setMoveOpen] = useState(false);
   const [world, setWorld] = useState(n.oworld || n.world || worlds[0]?.name || '');
   const [house, setHouse] = useState('');
@@ -65,8 +76,13 @@ export function SimEditor({
     }
   }, [moveOpen, world, houseOptions, house]);
 
+  useEffect(() => {
+    onLayout();
+  }, [moveOpen, onLayout]);
+
   return (
     <div
+      ref={editorRef}
       id="editor"
       className="editor"
       style={{ display: 'block', left, top }}
@@ -96,6 +112,17 @@ export function SimEditor({
         ))}
         {!LIFE_STATES.includes(state as (typeof LIFE_STATES)[number]) && (
           <option value={state}>{state}</option>
+        )}
+      </select>
+      <label>Playability</label>
+      <select value={oplay} onChange={(e) => setOplay(e.target.value)}>
+        {PLAYABILITY.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+        {!PLAYABILITY.includes(oplay as (typeof PLAYABILITY)[number]) && (
+          <option value={oplay}>{oplay}</option>
         )}
       </select>
       <label>Game pack</label>
@@ -159,7 +186,7 @@ export function SimEditor({
             const parts = name.trim().split(' ');
             const first = parts.shift() || name;
             const sur = parts.join(' ');
-            onSave({ first, sur, age, state });
+            onSave({ first, sur, age, state, oplay });
           }}
         >
           Save

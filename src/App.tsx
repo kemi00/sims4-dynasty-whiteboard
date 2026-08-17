@@ -4,6 +4,7 @@ import './App.css';
 import { AgesPanel } from './components/AgesPanel.tsx';
 import { AppBar } from './components/AppBar.tsx';
 import { GamesPanel } from './components/GamesPanel.tsx';
+import { PlayabilityPanel } from './components/PlayabilityPanel.tsx';
 import { WhiteboardStage } from './components/WhiteboardStage.tsx';
 import { useWhiteboard } from './hooks/useWhiteboard.ts';
 
@@ -16,13 +17,16 @@ export default function App() {
   const stageRef = useRef<HTMLDivElement>(null);
   const gamesBtnRef = useRef<HTMLButtonElement>(null);
   const agesBtnRef = useRef<HTMLButtonElement>(null);
+  const playBtnRef = useRef<HTMLButtonElement>(null);
   const gamesPanelRef = useRef<HTMLDivElement>(null);
   const agesPanelRef = useRef<HTMLDivElement>(null);
+  const playPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
         if (wb.gamesOpen) wb.setGamesOpen(false);
+        else if (wb.playOpen) wb.setPlayOpen(false);
         else if (wb.agesOpen) wb.setAgesOpen(false);
         else if (wb.editNodeId) wb.setEditNodeId(null);
         else if (wb.connectMenu) {
@@ -61,6 +65,14 @@ export default function App() {
         wb.setGamesOpen(false);
       }
       if (
+        wb.playOpen &&
+        playPanelRef.current &&
+        !playPanelRef.current.contains(t) &&
+        !playBtnRef.current?.contains(t)
+      ) {
+        wb.setPlayOpen(false);
+      }
+      if (
         wb.agesOpen &&
         agesPanelRef.current &&
         !agesPanelRef.current.contains(t) &&
@@ -71,7 +83,7 @@ export default function App() {
     };
     document.addEventListener('pointerdown', onPointer, true);
     return () => document.removeEventListener('pointerdown', onPointer, true);
-  }, [wb.gamesOpen, wb.agesOpen, wb]);
+  }, [wb.gamesOpen, wb.playOpen, wb.agesOpen, wb]);
 
   return (
     <IconContext.Provider value={ICONS}>
@@ -81,6 +93,7 @@ export default function App() {
           svgRef={svgRef}
           gamesBtnRef={gamesBtnRef}
           agesBtnRef={agesBtnRef}
+          playBtnRef={playBtnRef}
         />
         <WhiteboardStage wb={wb} svgRef={svgRef} stageRef={stageRef} />
         {wb.gamesOpen && (
@@ -99,12 +112,25 @@ export default function App() {
             />
           </div>
         )}
+        {wb.playOpen && (
+          <div ref={playPanelRef}>
+            <PlayabilityPanel
+              playabilities={wb.playabilities}
+              hiddenPlay={wb.hiddenPlay}
+              nodes={wb.nodes}
+              anchorRect={playBtnRef.current?.getBoundingClientRect() ?? null}
+              onToggle={wb.togglePlay}
+              onAll={() => wb.setHiddenPlay(new Set())}
+              onNone={() => wb.setHiddenPlay(new Set(wb.playabilities))}
+            />
+          </div>
+        )}
         {wb.agesOpen && (
           <div ref={agesPanelRef}>
             <AgesPanel
               nodes={wb.nodes}
               hiAges={wb.hiAges}
-              packVis={wb.packVis}
+              packVis={wb.nodeVis}
               anchorRect={agesBtnRef.current?.getBoundingClientRect() ?? null}
               onToggle={wb.toggleAge}
               onClear={() => wb.setHiAges(new Set())}

@@ -21,6 +21,13 @@ export interface SimNode {
   y: number;
   w: number;
   h: number;
+  /** Drag offset from the auto-layout base position. Persisted; x/y are derived. */
+  ox?: number;
+  oy?: number;
+  /** Pet only — Cat, Dog, or Horse. */
+  species?: string;
+  /** Pet only — breed name shown on the card detail line. */
+  breed?: string;
   /** Present on user-added sims (editor). */
   added?: boolean;
 }

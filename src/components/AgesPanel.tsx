@@ -1,4 +1,5 @@
-import { AGES_H } from '../lib/constants.ts';
+import { AGES_H, SPECIES, SPECIES_H } from '../lib/constants.ts';
+import { isPet } from '../lib/utils.ts';
 import type { SimNode } from '../types/whiteboard.ts';
 
 type Props = {
@@ -22,8 +23,11 @@ export function AgesPanel({
   let L = anchorRect.left;
   if (L + 266 > window.innerWidth) L = window.innerWidth - 266;
 
-  const cnt = (a: string) => nodes.filter((n) => n.age === a).length;
-  const total = nodes.length;
+  const sims = nodes.filter((n) => !isPet(n));
+  const pets = nodes.filter(isPet);
+  const cntAge = (a: string) => sims.filter((n) => n.age === a).length;
+  const cntSpecies = (s: string) =>
+    pets.filter((n) => n.species === s).length;
   const shown = nodes.filter(packVis).length;
 
   return (
@@ -37,14 +41,20 @@ export function AgesPanel({
       }}
     >
       <div className="gph">
-        <b>Highlight age / life-stage</b>
+        <b>Highlight age / life-stage / pets</b>
         <span>
           <button onClick={onClear}>Clear</button>
         </span>
       </div>
       <div style={{ margin: '0 4px 9px', fontSize: 12, color: '#3b4757' }}>
-        <b>{total}</b> sims total
-        {shown !== total && (
+        <b>{sims.length}</b> sims
+        {pets.length > 0 && (
+          <>
+            {' '}
+            · <b>{pets.length}</b> pets
+          </>
+        )}
+        {shown !== nodes.length && (
           <>
             {' '}
             · <b>{shown}</b> shown
@@ -60,10 +70,38 @@ export function AgesPanel({
             onClick={() => onToggle(a)}
           >
             {a}{' '}
-            <b style={{ opacity: 0.6 }}>{cnt(a)}</b>
+            <b style={{ opacity: 0.6 }}>{cntAge(a)}</b>
           </button>
         ))}
       </div>
+      {pets.length > 0 && (
+        <>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: '#6b7280',
+              margin: '10px 4px 6px',
+              letterSpacing: '0.02em',
+            }}
+          >
+            Pets
+          </div>
+          <div className="agechips">
+            {SPECIES_H.map((s) => (
+              <button
+                key={s}
+                data-species={s}
+                className={hiAges.has(s) ? 'on' : ''}
+                onClick={() => onToggle(s)}
+              >
+                {SPECIES[s]} {s}{' '}
+                <b style={{ opacity: 0.6 }}>{cntSpecies(s)}</b>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       <div
         style={{
           fontSize: 10,

@@ -1,0 +1,1133 @@
+import {
+  AGES_H,
+  CARD_DETAIL_CH,
+  CARD_H,
+  CARD_MIN_W,
+  CARD_PAD_X,
+  CARD_TEXT_X,
+} from './constants.ts';
+import type { Edge, SimNode, World } from '../types/whiteboard.ts';
+
+/** Spacing rules — row pitch grows with CARD_H automatically. */
+export const LAYOUT = {
+  gapX: 72,
+  partnerGap: 64,
+  gapYExtra: 48,
+  hhPad: 20,
+  hhHeader: 40,
+  hhGap: 36,
+  /** Clears dashed household boxes when linked HH columns sit side-by-side (2×hhPad + 8). */
+  connectedHhGap: 48,
+  hhPerRow: 3,
+  worldRowMaxW: 1600,
+  worldCols: 4,
+  worldGapX: 64,
+  worldGapY: 56,
+  originX: 48,
+  originY: 96,
+  worldTitle: 32,
+  worldMargin: 20,
+} as const;
+
+export function rowPitch(): number {
+  return CARD_H + LAYOUT.gapYExtra;
+}
+
+export function cardDetailLine(n: SimNode): string {
+  return [n.breed, n.oplay]
+    .map((s) => String(s || '').trim())
+    .filter((s) => s && s !== '-')
+    .join(' · ');
+}
+
+export function measureCard(n: SimNode): { w: number; h: number } {
+  const detail = cardDetailLine(n);
+  const w = Math.max(
+    CARD_MIN_W,
+    Math.ceil(CARD_TEXT_X + detail.length * CARD_DETAIL_CH + CARD_PAD_X),
+  );
+  return { w, h: CARD_H };
+}
+
+type PlacedCard = { id: string; x: number; y: number; w: number; h: number };
+
+type HHGraph = {
+  partner: Map<string, string>;
+  parents: Map<string, Set<string>>;
+};
+
+function ageRank(age: string): number {
+  const i = AGES_H.indexOf(age as (typeof AGES_H)[number]);
+  return i >= 0 ? i : 4;
+}
+
+function buildHHGraph(mem: SimNode[], edges: Edge[]): HHGraph {
+  const ids = new Set(mem.map((n) => n.id));
+  const byId = new Map(mem.map((n) => [n.id, n]));
+  const partner = new Map<string, string>();
+  const parents = new Map<string, Set<string>>();
+
+  for (const e of edges) {
+    if (!ids.has(e.a) || !ids.has(e.b)) continue;
+    if (e.type === 'marriage' || e.type === 'romance' || e.type === 'divorced') {
+      partner.set(e.a, e.b);
+      partner.set(e.b, e.a);
+    }
+  }
+
+  for (const e of edges) {
+    if (e.type !== 'parent' || !ids.has(e.a) || !ids.has(e.b)) continue;
+
+    const bParentsKidsInHh = edges.some(
+      (x) => x.type === 'parent' && x.a === e.b && ids.has(x.b),
+    );
+    const aParentsThoseKids = edges.some(
+      (x) =>
+        x.type === 'parent' &&
+        x.a === e.a &&
+        x.b !== e.b &&
+        ids.has(x.b),
+    );
+    const na = byId.get(e.a)!;
+    const nb = byId.get(e.b)!;
+    const ageGap = Math.abs(ageRank(na.age) - ageRank(nb.age));
+
+    /** Spouse mislabeled as parent (e.g. Adekoya→Jawara while Jawara parents the kids). */
+    if (
+      bParentsKidsInHh &&
+      !aParentsThoseKids &&
+      ageGap >= 2 &&
+      ageRank(na.age) <= ageRank(nb.age)
+    ) {
+      partner.set(e.a, e.b);
+      partner.set(e.b, e.a);
+      continue;
+    }
+
+    if (!parents.has(e.b)) parents.set(e.b, new Set());
+    parents.get(e.b)!.add(e.a);
+  }
+  return { partner, parents };
+}
+
+function householdMinGen(hhMem: SimNode[], edges: Edge[]): number {
+  const g = buildHHGraph(hhMem, edges);
+  const gen = generationRows(hhMem, g.parents);
+  alignPartnerGenerationsFromGraph(hhMem, gen, g.partner);
+  propagateGenerationsFromParents(hhMem, gen, g.parents);
+  return Math.min(...hhMem.map((n) => gen.get(n.id) ?? 0));
+}
+
+/** Spouses share a generation row — use the higher of the two assigned rows. */
+function alignPartnerGenerationsFromGraph(
+  mem: SimNode[],
+  gen: Map<string, number>,
+  partner: Map<string, string>,
+): void {
+  const ids = new Set(mem.map((n) => n.id));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const n of mem) {
+      const p = partner.get(n.id);
+      if (!p || !ids.has(p)) continue;
+      const g = Math.max(gen.get(n.id) ?? 0, gen.get(p) ?? 0);
+      if ((gen.get(n.id) ?? 0) !== g) {
+        gen.set(n.id, g);
+        changed = true;
+      }
+      if ((gen.get(p) ?? 0) !== g) {
+        gen.set(p, g);
+        changed = true;
+      }
+    }
+  }
+}
+
+/** Partner alignment can pull a parent down — re-seat their children on lower rows. */
+function propagateGenerationsFromParents(
+  mem: SimNode[],
+  gen: Map<string, number>,
+  parents: Map<string, Set<string>>,
+): void {
+  const ids = new Set(mem.map((n) => n.id));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const n of mem) {
+      const ps = [...(parents.get(n.id) ?? [])].filter((p) => ids.has(p));
+      if (!ps.length) continue;
+      const need = Math.max(...ps.map((p) => (gen.get(p) ?? 0) + 1));
+      const cur = gen.get(n.id) ?? 0;
+      if (cur < need) {
+        gen.set(n.id, need);
+        changed = true;
+      }
+    }
+  }
+}
+
+/** Assign generation rows: parents on top, children below. */
+function generationRows(
+  mem: SimNode[],
+  parents: Map<string, Set<string>>,
+): Map<string, number> {
+  const ids = new Set(mem.map((n) => n.id));
+  const gen = new Map<string, number>();
+
+  const hasParents = (id: string) => {
+    const ps = parents.get(id);
+    return ps ? ps.size > 0 : false;
+  };
+
+  /** Parents in linked households count as generation 0 when not in this block. */
+  const parentGen = (pid: string) => (ids.has(pid) ? gen.get(pid)! : 0);
+
+  for (const n of mem) {
+    if (!hasParents(n.id)) gen.set(n.id, 0);
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const n of mem) {
+      if (gen.has(n.id)) continue;
+      const ps = [...(parents.get(n.id) ?? [])];
+      if (ps.length > 0 && ps.every((p) => !ids.has(p) || gen.has(p))) {
+        gen.set(n.id, Math.max(...ps.map(parentGen)) + 1);
+        changed = true;
+      }
+    }
+  }
+  for (const n of mem) {
+    if (!gen.has(n.id)) gen.set(n.id, 0);
+  }
+  return gen;
+}
+
+const byName = (a: SimNode, b: SimNode) =>
+  `${a.first} ${a.sur}`.localeCompare(`${b.first} ${b.sur}`);
+
+/** Sorted in-household parent ids for a child, or '' when none. */
+function sharedParentKey(
+  n: SimNode,
+  g: HHGraph,
+  hhIds: Set<string>,
+): string {
+  return [...(g.parents.get(n.id) ?? [])]
+    .filter((p) => hhIds.has(p))
+    .sort()
+    .join('|');
+}
+
+/** Sibling cluster centered under parent couple (or single parent). */
+function layoutSiblingCluster(
+  members: SimNode[],
+  parentIds: string[],
+  placedById: Map<string, PlacedCard>,
+  originY: number,
+  columnMinX?: number,
+): PlacedCard[] {
+  const sorted = [...members].sort(byName);
+  const cards = sorted.map((n) => ({ n, ...measureCard(n) }));
+  const totalW =
+    cards.reduce((s, c) => s + c.w, 0) +
+    Math.max(0, cards.length - 1) * LAYOUT.gapX;
+
+  const parentCards = parentIds
+    .map((id) => placedById.get(id))
+    .filter((p): p is PlacedCard => !!p);
+
+  let anchorX: number;
+  if (parentCards.length >= 2) {
+    anchorX =
+      (parentCards[0]!.x +
+        parentCards[0]!.w / 2 +
+        parentCards[1]!.x +
+        parentCards[1]!.w / 2) /
+      2;
+  } else if (parentCards.length === 1) {
+    anchorX = parentCards[0]!.x + parentCards[0]!.w / 2;
+  } else {
+    anchorX = totalW / 2;
+  }
+
+  if (
+    columnMinX !== undefined &&
+    parentCards.some((p) => p.x < columnMinX - 1)
+  ) {
+    anchorX = columnMinX + totalW / 2;
+  }
+
+  let x = anchorX - totalW / 2;
+  if (columnMinX !== undefined) x = Math.max(x, columnMinX);
+  const placed: PlacedCard[] = [];
+  for (const c of cards) {
+    placed.push({
+      id: c.n.id,
+      x: Math.round(x),
+      y: Math.round(originY),
+      w: c.w,
+      h: c.h,
+    });
+    x += c.w + LAYOUT.gapX;
+  }
+  return placed;
+}
+
+/** Generation 0: partners & singles in a row. Child rows: siblings clustered under parents. */
+function layoutGenerationRow(
+  rowMem: SimNode[],
+  g: HHGraph,
+  placedById: Map<string, PlacedCard>,
+  hhIds: Set<string>,
+  originX: number,
+  originY: number,
+  genIndex: number,
+): { placed: PlacedCard[]; w: number } {
+  if (genIndex === 0) {
+    return layoutCardsRow(rowMem, g, hhIds, originX, originY);
+  }
+
+  const keys = rowMem.map((n) => sharedParentKey(n, g, hhIds));
+  const k0 = keys[0];
+  /** Only cluster when every sim in the row shares the same parent set (actual siblings). */
+  const allSiblings = !!k0 && keys.every((k) => k === k0);
+
+  if (allSiblings) {
+    const parentIds = k0.split('|').filter(Boolean);
+    const placed = layoutSiblingCluster(
+      rowMem,
+      parentIds,
+      placedById,
+      originY,
+      originX,
+    );
+    if (!placed.length) return { placed, w: LAYOUT.hhPad * 2 };
+    const maxX = Math.max(...placed.map((p) => p.x + p.w));
+    return { placed, w: maxX - originX + LAYOUT.hhPad };
+  }
+
+  const row = layoutCardsRow(rowMem, g, hhIds, originX, originY);
+  return centerRowUnderParents(row, rowMem, g, placedById, hhIds, originX);
+}
+
+/** Shift a child/spouse row so it sits under the parent couple, not flush-left. */
+function centerRowUnderParents(
+  row: { placed: PlacedCard[]; w: number },
+  rowMem: SimNode[],
+  g: HHGraph,
+  placedById: Map<string, PlacedCard>,
+  hhIds: Set<string>,
+  columnMinX?: number,
+): { placed: PlacedCard[]; w: number } {
+  const parentCards: PlacedCard[] = [];
+  const seen = new Set<string>();
+  for (const n of rowMem) {
+    for (const pid of g.parents.get(n.id) ?? []) {
+      if (seen.has(pid)) continue;
+      seen.add(pid);
+      const mate = g.partner.get(pid);
+      if (mate && (hhIds.has(mate) || placedById.has(mate))) seen.add(mate);
+    }
+  }
+  for (const id of seen) {
+    const card = placedById.get(id);
+    if (card) parentCards.push(card);
+  }
+  if (!parentCards.length || !row.placed.length) return row;
+
+  let anchorX: number;
+  if (parentCards.length >= 2) {
+    anchorX =
+      (parentCards[0]!.x +
+        parentCards[0]!.w / 2 +
+        parentCards[1]!.x +
+        parentCards[1]!.w / 2) /
+      2;
+  } else {
+    anchorX = parentCards[0]!.x + parentCards[0]!.w / 2;
+  }
+
+  /** Parents live in an earlier cluster column — stay flush-left here. */
+  if (columnMinX !== undefined && parentCards.some((p) => p.x < columnMinX - 1)) {
+    return row;
+  }
+
+  const minX = Math.min(...row.placed.map((p) => p.x));
+  const maxX = Math.max(...row.placed.map((p) => p.x + p.w));
+  let shift = anchorX - (minX + maxX) / 2;
+  if (columnMinX !== undefined) {
+    shift = Math.max(shift, columnMinX - minX);
+  }
+  if (Math.abs(shift) < 1) return row;
+
+  const placed = row.placed.map((p) => ({
+    ...p,
+    x: Math.round(p.x + shift),
+  }));
+  const newMax = Math.max(...placed.map((p) => p.x + p.w));
+  const baseX = columnMinX ?? minX;
+  return { placed, w: newMax - baseX + LAYOUT.hhPad };
+}
+
+/** Parent-set key for a sim id (used when grouping row units). */
+function parentKeyFor(
+  id: string,
+  g: HHGraph,
+  hhIds: Set<string>,
+): string {
+  return [...(g.parents.get(id) ?? [])]
+    .filter((p) => hhIds.has(p))
+    .sort()
+    .join('|');
+}
+
+/** Thi before Liên+Alon — sibling adjacent to partnered sibling, not after the spouse. */
+function attachSiblingsToPartnerUnits(
+  units: string[][],
+  g: HHGraph,
+  hhIds: Set<string>,
+): string[][] {
+  const isCouple = (u: string[]) =>
+    u.length === 2 && g.partner.get(u[0]!) === u[1];
+  const singles = units.filter((u) => u.length === 1);
+  const consumed = new Set<string>();
+  const out: string[][] = [];
+
+  for (const unit of units) {
+    if (!isCouple(unit)) {
+      if (unit.length === 1) {
+        if (!consumed.has(unit[0]!)) out.push(unit);
+      } else {
+        out.push(unit);
+      }
+      continue;
+    }
+    const key = parentKeyFor(unit[0]!, g, hhIds);
+    const attached = singles
+      .filter(
+        (u) =>
+          !consumed.has(u[0]!) &&
+          key &&
+          parentKeyFor(u[0]!, g, hhIds) === key &&
+          u[0] !== unit[0] &&
+          u[0] !== unit[1],
+      )
+      .map((u) => u[0]!)
+      .sort();
+    attached.forEach((id) => consumed.add(id));
+    out.push(attached.length ? [...attached, ...unit] : unit);
+  }
+  return out;
+}
+
+/** Place one generation band — cards only, no household title (drawn once by GroupLayer). */
+function layoutCardsRow(
+  rowMembers: SimNode[],
+  g: HHGraph,
+  hhIds: Set<string>,
+  originX: number,
+  originY: number,
+): { placed: PlacedCard[]; w: number } {
+  const ids = new Set(rowMembers.map((n) => n.id));
+  const placed = new Set<string>();
+  const units: string[][] = [];
+
+  for (const n of [...rowMembers].sort(byName)) {
+    if (placed.has(n.id)) continue;
+    const p = g.partner.get(n.id);
+    if (p && ids.has(p) && !placed.has(p)) {
+      units.push(
+        [n.id, p].sort((a, b) => {
+          const aParents = g.parents.get(a)?.size ?? 0;
+          const bParents = g.parents.get(b)?.size ?? 0;
+          if (aParents !== bParents) return bParents - aParents;
+          return a.localeCompare(b);
+        }),
+      );
+      placed.add(n.id);
+      placed.add(p);
+    }
+  }
+
+  const byParentKey = new Map<string, string[]>();
+  for (const n of rowMembers) {
+    if (placed.has(n.id)) continue;
+    const key = sharedParentKey(n, g, hhIds);
+    if (!byParentKey.has(key)) byParentKey.set(key, []);
+    byParentKey.get(key)!.push(n.id);
+  }
+  for (const [key, group] of byParentKey) {
+    if (group.length > 1 && key) {
+      units.push(group.sort((a, b) => a.localeCompare(b)));
+      group.forEach((id) => placed.add(id));
+    }
+  }
+
+  for (const n of rowMembers) {
+    if (!placed.has(n.id)) units.push([n.id]);
+  }
+
+  const merged = attachSiblingsToPartnerUnits(units, g, hhIds);
+  merged.sort((a, b) => a[0]!.localeCompare(b[0]!));
+
+  const byId = new Map(rowMembers.map((n) => [n.id, n]));
+  let x = originX;
+  const placedCards: PlacedCard[] = [];
+
+  for (let u = 0; u < merged.length; u++) {
+    const unit = merged[u]!;
+    if (u > 0) x += LAYOUT.gapX;
+    for (let i = 0; i < unit.length; i++) {
+      const id = unit[i]!;
+      const n = byId.get(id)!;
+      const { w, h } = measureCard(n);
+      placedCards.push({ id, x: Math.round(x), y: Math.round(originY), w, h });
+      const gapAfter =
+        i < unit.length - 1
+          ? g.partner.has(id) && g.partner.get(id) === unit[i + 1]
+            ? LAYOUT.partnerGap
+            : LAYOUT.gapX
+          : 0;
+      x += w + gapAfter;
+    }
+  }
+
+  const w = placedCards.length
+    ? x - LAYOUT.gapX + LAYOUT.hhPad
+    : LAYOUT.hhPad * 2;
+  return { placed: placedCards, w };
+}
+
+type HHBlock = { gid: string; w: number; h: number; placed: PlacedCard[] };
+
+/** Cross-household adjacency from any relationship edge in this world. */
+function buildHouseholdLinks(
+  mem: SimNode[],
+  edges: Edge[],
+): Map<string, Set<string>> {
+  const idToGid = new Map(mem.map((n) => [n.id, n.gid]));
+  const links = new Map<string, Set<string>>();
+  const link = (a: string, b: string) => {
+    if (a === b) return;
+    if (!links.has(a)) links.set(a, new Set());
+    if (!links.has(b)) links.set(b, new Set());
+    links.get(a)!.add(b);
+    links.get(b)!.add(a);
+  };
+  for (const e of edges) {
+    const ga = idToGid.get(e.a);
+    const gb = idToGid.get(e.b);
+    if (!ga || !gb || ga === gb) continue;
+    link(ga, gb);
+  }
+  return links;
+}
+
+/** Place linked households next to each other; unlinked clusters keep generation order. */
+function orderHouseholdsByLinks(
+  households: [string, SimNode[]][],
+  hhLinks: Map<string, Set<string>>,
+  minGen: (hhMem: SimNode[]) => number,
+): [string, SimNode[]][] {
+  const byGid = new Map(households);
+  const gidSet = new Set(households.map(([gid]) => gid));
+  const visited = new Set<string>();
+  const ordered: [string, SimNode[]][] = [];
+
+  const seeds = [...households].sort((a, b) => {
+    const ga = minGen(a[1]);
+    const gb = minGen(b[1]);
+    if (ga !== gb) return ga - gb;
+    return (a[1][0]?.hh ?? '').localeCompare(b[1][0]?.hh ?? '');
+  });
+
+  for (const [gid] of seeds) {
+    if (visited.has(gid)) continue;
+    const queue = [gid];
+    visited.add(gid);
+    while (queue.length) {
+      const cur = queue.shift()!;
+      ordered.push([cur, byGid.get(cur)!]);
+      const neighbors = [...(hhLinks.get(cur) ?? [])]
+        .filter((n) => gidSet.has(n) && !visited.has(n))
+        .sort((a, b) => {
+          const ha = byGid.get(a)!;
+          const hb = byGid.get(b)!;
+          const ga = minGen(ha);
+          const gb = minGen(hb);
+          if (ga !== gb) return ga - gb;
+          return (ha[0]?.hh ?? '').localeCompare(hb[0]?.hh ?? '');
+        });
+      for (const n of neighbors) {
+        visited.add(n);
+        queue.push(n);
+      }
+    }
+  }
+  return ordered;
+}
+
+/** Shift cards to origin and return tight pixel bounds. */
+function finalizeHouseholdBlock(
+  placed: PlacedCard[],
+  originX: number,
+  originY: number,
+): { placed: PlacedCard[]; w: number; h: number } {
+  if (!placed.length) {
+    return {
+      placed,
+      w: LAYOUT.hhPad * 2,
+      h: LAYOUT.hhHeader + LAYOUT.hhPad * 2,
+    };
+  }
+  const minX = Math.min(...placed.map((p) => p.x));
+  const maxX = Math.max(...placed.map((p) => p.x + p.w));
+  const minY = Math.min(...placed.map((p) => p.y));
+  const maxY = Math.max(...placed.map((p) => p.y + p.h));
+  const baseX = originX + LAYOUT.hhPad;
+  const baseY = originY + LAYOUT.hhHeader + LAYOUT.hhPad;
+  const dx = baseX - minX;
+  /** Keep intentional generation padding — only nudge upward when content sits too high. */
+  const dy = minY < baseY ? baseY - minY : 0;
+  const normalized =
+    dx || dy
+      ? placed.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy }))
+      : placed;
+  const topY = minY + dy;
+  return {
+    placed: normalized,
+    w: maxX - minX + LAYOUT.hhPad * 2,
+    h: maxY - topY + LAYOUT.hhHeader + LAYOUT.hhPad,
+  };
+}
+
+/** Connected household groups within one world. */
+function buildHouseholdComponents(
+  households: [string, SimNode[]][],
+  hhLinks: Map<string, Set<string>>,
+): [string, SimNode[]][][] {
+  const byGid = new Map(households);
+  const visited = new Set<string>();
+  const components: [string, SimNode[]][][] = [];
+
+  for (const [gid] of households) {
+    if (visited.has(gid)) continue;
+    const component: [string, SimNode[]][] = [];
+    const queue = [gid];
+    visited.add(gid);
+    while (queue.length) {
+      const cur = queue.shift()!;
+      component.push([cur, byGid.get(cur)!]);
+      for (const n of hhLinks.get(cur) ?? []) {
+        if (byGid.has(n) && !visited.has(n)) {
+          visited.add(n);
+          queue.push(n);
+        }
+      }
+    }
+    components.push(component);
+  }
+  return components;
+}
+
+type HHTile = { w: number; h: number; placed: PlacedCard[]; isCluster: boolean; sortKey: string };
+
+/**
+ * Pack linked households in side-by-side columns with synced generation rows.
+ * Cards never interleave across gid boundaries, so household boxes stay apart.
+ */
+function layoutClusterTile(
+  component: [string, SimNode[]][],
+  edges: Edge[],
+  hhLinks: Map<string, Set<string>>,
+): HHTile {
+  const minGenFn = (hhMem: SimNode[]) => householdMinGen(hhMem, edges);
+  const ordered = orderHouseholdsByLinks(component, hhLinks, minGenFn);
+  const allMem = ordered.flatMap(([, mem]) => mem);
+  const allIds = new Set(allMem.map((n) => n.id));
+
+  const g = buildHHGraph(allMem, edges);
+  for (const e of edges) {
+    if (e.type !== 'parent' || !allIds.has(e.b)) continue;
+    if (!g.parents.has(e.b)) g.parents.set(e.b, new Set());
+    g.parents.get(e.b)!.add(e.a);
+  }
+  const gen = generationRows(allMem, g.parents);
+  alignPartnerGenerationsFromGraph(allMem, gen, g.partner);
+  propagateGenerationsFromParents(allMem, gen, g.parents);
+  const minGen = Math.min(...allMem.map((n) => gen.get(n.id) ?? 0));
+  const maxGen = Math.max(...allMem.map((n) => gen.get(n.id) ?? 0));
+  const pitchY = rowPitch();
+
+  const placed: PlacedCard[] = [];
+  const placedById = new Map<string, PlacedCard>();
+  let cardY = LAYOUT.hhHeader + LAYOUT.hhPad + minGen * pitchY;
+
+  for (let gi = minGen; gi <= maxGen; gi++) {
+    let rowX = LAYOUT.hhPad;
+    for (const [, hhMem] of ordered) {
+      const hhIds = new Set(hhMem.map((n) => n.id));
+      const rowMem = hhMem.filter((n) => (gen.get(n.id) ?? 0) === gi);
+      if (!rowMem.length) continue;
+      const row = layoutGenerationRow(
+        rowMem,
+        g,
+        placedById,
+        hhIds,
+        rowX,
+        cardY,
+        gi,
+      );
+      for (const p of row.placed) placedById.set(p.id, p);
+      placed.push(...row.placed);
+      const sliceMax = Math.max(...row.placed.map((p) => p.x + p.w));
+      rowX = sliceMax + LAYOUT.hhPad + LAYOUT.connectedHhGap;
+    }
+    cardY += pitchY;
+  }
+
+  const { placed: normalized, w, h } = finalizeHouseholdBlock(placed, 0, 0);
+  const sortKey = ordered.map(([, mem]) => mem[0]?.hh ?? '').sort().join('|');
+  return { w, h, placed: normalized, isCluster: true, sortKey };
+}
+
+function layoutSingleTile(
+  gid: string,
+  mem: SimNode[],
+  edges: Edge[],
+): HHTile {
+  const block = layoutHousehold(mem, edges, 0, 0);
+  return {
+    w: block.w,
+    h: block.h,
+    placed: block.placed,
+    isCluster: false,
+    sortKey: mem[0]?.hh ?? gid,
+  };
+}
+
+function columnOffsets(colWidths: number[]): number[] {
+  const x: number[] = [0];
+  for (let c = 1; c < colWidths.length; c++) {
+    x[c] = x[c - 1]! + colWidths[c - 1]! + LAYOUT.hhGap;
+  }
+  return x;
+}
+
+/** Two-pass column pack: assign columns first, then place using final column widths. */
+function packTilesInColumns(
+  assignments: { tile: HHTile; col: number }[],
+  cols: number,
+  colWidths: number[],
+): { placed: PlacedCard[]; w: number; h: number } {
+  const colX = columnOffsets(colWidths);
+  const colHeights = new Array<number>(cols).fill(0);
+  const placed: PlacedCard[] = [];
+
+  for (const { tile, col } of assignments) {
+    const ox = colX[col]!;
+    const oy = colHeights[col]!;
+    for (const p of tile.placed) {
+      placed.push({ ...p, x: p.x + ox, y: p.y + oy });
+    }
+    colHeights[col] = oy + tile.h + LAYOUT.hhGap;
+  }
+
+  const contentW =
+    cols > 0 ? colX[cols - 1]! + colWidths[cols - 1]! : 0;
+  const contentH = Math.max(0, Math.max(...colHeights) - LAYOUT.hhGap);
+  return { placed, w: contentW, h: contentH };
+}
+
+function assignTilesToColumns(
+  tiles: HHTile[],
+  cols: number,
+  colStart: number,
+  colCount: number,
+  colHeights: number[],
+  colWidths: number[],
+  out: { tile: HHTile; col: number }[],
+): void {
+  for (const tile of tiles) {
+    let col = colStart;
+    for (let c = colStart + 1; c < colStart + colCount; c++) {
+      if (colHeights[c]! < colHeights[col]!) col = c;
+    }
+    out.push({ tile, col });
+    colHeights[col] = colHeights[col]! + tile.h + LAYOUT.hhGap;
+    colWidths[col] = Math.max(colWidths[col]!, tile.w);
+  }
+}
+
+/**
+ * Bento-style packer: linked households cluster on the right; unconnected
+ * singles stack in regular columns on the left.
+ */
+function placeHouseholdBento(
+  households: [string, SimNode[]][],
+  edges: Edge[],
+  hhLinks: Map<string, Set<string>>,
+): { placed: PlacedCard[]; w: number; h: number } {
+  const components = buildHouseholdComponents(households, hhLinks);
+  const clusterTiles: HHTile[] = [];
+  const singleTiles: HHTile[] = [];
+
+  for (const comp of components) {
+    if (comp.length === 1) {
+      const [gid, mem] = comp[0]!;
+      singleTiles.push(layoutSingleTile(gid, mem, edges));
+    } else {
+      clusterTiles.push(layoutClusterTile(comp, edges, hhLinks));
+    }
+  }
+
+  clusterTiles.sort((a, b) => b.w * b.h - a.w * a.h);
+  singleTiles.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+  const cols = LAYOUT.hhPerRow;
+  const colHeights = new Array<number>(cols).fill(0);
+  const colWidths = new Array<number>(cols).fill(0);
+  const assignments: { tile: HHTile; col: number }[] = [];
+
+  if (!clusterTiles.length) {
+    assignTilesToColumns(singleTiles, cols, 0, cols, colHeights, colWidths, assignments);
+  } else {
+    const singleCols = Math.min(cols - 1, singleTiles.length > 4 ? 2 : 1);
+    assignTilesToColumns(
+      singleTiles,
+      cols,
+      0,
+      singleCols,
+      colHeights,
+      colWidths,
+      assignments,
+    );
+    assignTilesToColumns(
+      clusterTiles,
+      cols,
+      singleCols,
+      cols - singleCols,
+      colHeights,
+      colWidths,
+      assignments,
+    );
+  }
+
+  return packTilesInColumns(assignments, cols, colWidths);
+}
+
+/** Masonry: worlds fill worldCols side-by-side columns (shortest column next). */
+function placeWorldColumns(
+  worldBlocks: WorldBlock[],
+): Map<string, { x: number; y: number; w: number; h: number }> {
+  const cols = LAYOUT.worldCols;
+  const colHeights = new Array<number>(cols).fill(LAYOUT.originY);
+  const colWidths = new Array<number>(cols).fill(0);
+  const assignments: { block: WorldBlock; col: number }[] = [];
+
+  for (const block of worldBlocks) {
+    let col = 0;
+    for (let c = 1; c < cols; c++) {
+      if (colHeights[c]! < colHeights[col]!) col = c;
+    }
+    assignments.push({ block, col });
+    colHeights[col] = colHeights[col]! + block.h + LAYOUT.worldGapY;
+    colWidths[col] = Math.max(colWidths[col]!, block.w);
+  }
+
+  const colX: number[] = [LAYOUT.originX];
+  for (let c = 1; c < cols; c++) {
+    colX[c] = colX[c - 1]! + colWidths[c - 1]! + LAYOUT.worldGapX;
+  }
+
+  const bases = new Map<string, { x: number; y: number; w: number; h: number }>();
+  colHeights.fill(LAYOUT.originY);
+  for (const { block, col } of assignments) {
+    const y = colHeights[col]!;
+    const ox = colX[col]! + LAYOUT.worldMargin;
+    const oy = y + LAYOUT.worldTitle;
+    for (const p of block.placed) {
+      bases.set(p.id, { x: ox + p.x, y: oy + p.y, w: p.w, h: p.h });
+    }
+    colHeights[col] = y + block.h + LAYOUT.worldGapY;
+  }
+  return bases;
+}
+
+function layoutHousehold(
+  mem: SimNode[],
+  edges: Edge[],
+  originX: number,
+  originY: number,
+): HHBlock {
+  const g = buildHHGraph(mem, edges);
+  const hhIds = new Set(mem.map((n) => n.id));
+  /** Parents in linked households still set generation rows for children here. */
+  for (const e of edges) {
+    if (e.type !== 'parent' || !hhIds.has(e.b)) continue;
+    if (!g.parents.has(e.b)) g.parents.set(e.b, new Set());
+    g.parents.get(e.b)!.add(e.a);
+  }
+  const gen = generationRows(mem, g.parents);
+  alignPartnerGenerationsFromGraph(mem, gen, g.partner);
+  propagateGenerationsFromParents(mem, gen, g.parents);
+  const minGen = Math.min(...mem.map((n) => gen.get(n.id) ?? 0));
+  const maxGen = Math.max(...mem.map((n) => gen.get(n.id) ?? 0));
+  const pitchY = rowPitch();
+
+  const placed: PlacedCard[] = [];
+  const placedById = new Map<string, PlacedCard>();
+  /** Offset so gen 1 in this block aligns with gen 1 in linked neighbor blocks. */
+  let cardY =
+    originY + LAYOUT.hhHeader + LAYOUT.hhPad + minGen * pitchY;
+
+  for (let gi = minGen; gi <= maxGen; gi++) {
+    const rowMem = mem.filter((n) => (gen.get(n.id) ?? 0) === gi);
+    if (!rowMem.length) continue;
+    const row = layoutGenerationRow(
+      rowMem,
+      g,
+      placedById,
+      hhIds,
+      originX + LAYOUT.hhPad,
+      cardY,
+      gi,
+    );
+    for (const p of row.placed) placedById.set(p.id, p);
+    placed.push(...row.placed);
+    cardY += pitchY;
+  }
+
+  const { placed: normalized, w, h } = finalizeHouseholdBlock(
+    placed,
+    originX,
+    originY,
+  );
+  return { gid: mem[0]!.gid, w, h, placed: normalized };
+}
+
+type WorldBlock = { world: string; w: number; h: number; placed: PlacedCard[] };
+
+export const OTHER_WORLD = 'Other';
+
+function layoutOtherWorld(mem: SimNode[], edges: Edge[]): WorldBlock {
+  const hhLinks = buildHouseholdLinks(mem, edges);
+  const byGid = new Map<string, SimNode[]>();
+  for (const n of mem) {
+    if (!byGid.has(n.gid)) byGid.set(n.gid, []);
+    byGid.get(n.gid)!.push(n);
+  }
+
+  const minGen = (hhMem: SimNode[]) => householdMinGen(hhMem, edges);
+
+  const households = orderHouseholdsByLinks(
+    [...byGid.entries()],
+    hhLinks,
+    minGen,
+  );
+
+  const { placed, w: contentW, h: contentH } = placeHouseholdBento(
+    households,
+    edges,
+    hhLinks,
+  );
+
+  return {
+    world: OTHER_WORLD,
+    w: contentW + LAYOUT.worldMargin * 2,
+    h: contentH + LAYOUT.worldTitle + LAYOUT.worldMargin * 2,
+    placed,
+  };
+}
+
+/** Households in a fixed 3-column grid inside the world. */
+function layoutWorld(mem: SimNode[], edges: Edge[], world: string): WorldBlock {
+  if (world === OTHER_WORLD) return layoutOtherWorld(mem, edges);
+  const hhLinks = buildHouseholdLinks(mem, edges);
+  const byGid = new Map<string, SimNode[]>();
+  for (const n of mem) {
+    if (!byGid.has(n.gid)) byGid.set(n.gid, []);
+    byGid.get(n.gid)!.push(n);
+  }
+
+  const minGen = (hhMem: SimNode[]) => householdMinGen(hhMem, edges);
+
+  const households = orderHouseholdsByLinks(
+    [...byGid.entries()],
+    hhLinks,
+    minGen,
+  );
+
+  const { placed, w: contentW, h: contentH } = placeHouseholdBento(
+    households,
+    edges,
+    hhLinks,
+  );
+
+  return {
+    world: mem[0]?.world ?? '',
+    w: contentW + LAYOUT.worldMargin * 2,
+    h: contentH + LAYOUT.worldTitle + LAYOUT.worldMargin * 2,
+    placed,
+  };
+}
+
+export function layoutBases(
+  nodes: SimNode[],
+  worlds: World[],
+  edges: Edge[],
+): Map<string, { x: number; y: number; w: number; h: number }> {
+  const byWorld = new Map<string, SimNode[]>();
+  for (const n of nodes) {
+    const w = n.world || OTHER_WORLD;
+    if (!byWorld.has(w)) byWorld.set(w, []);
+    byWorld.get(w)!.push(n);
+  }
+
+  const worldOrder = [
+    ...worlds.map((w) => w.name).filter((w) => byWorld.has(w)),
+    ...[...byWorld.keys()].filter((w) => !worlds.some((o) => o.name === w)),
+  ];
+
+  const worldBlocks = worldOrder
+    .map((world) => {
+      const mem = byWorld.get(world);
+      return mem?.length ? layoutWorld(mem, edges, world) : null;
+    })
+    .filter((b): b is WorldBlock => b !== null);
+
+  const bases = placeWorldColumns(worldBlocks);
+  resolveHouseholdBoxOverlaps(nodes, bases);
+  return bases;
+}
+
+type HHBox = { l: number; t: number; r: number; b: number };
+
+function householdBox(
+  gid: string,
+  world: string,
+  nodes: SimNode[],
+  bases: Map<string, { x: number; y: number; w: number; h: number }>,
+): HHBox | null {
+  const pad = LAYOUT.hhPad;
+  const hdr = LAYOUT.hhHeader;
+  let x0 = 1e9;
+  let y0 = 1e9;
+  let x1 = -1e9;
+  let y1 = -1e9;
+  let any = false;
+  for (const n of nodes) {
+    if (n.gid !== gid || (n.world || OTHER_WORLD) !== world) continue;
+    const b = bases.get(n.id);
+    if (!b) continue;
+    any = true;
+    x0 = Math.min(x0, b.x);
+    y0 = Math.min(y0, b.y);
+    x1 = Math.max(x1, b.x + b.w);
+    y1 = Math.max(y1, b.y + b.h);
+  }
+  if (!any) return null;
+  return { l: x0 - pad, t: y0 - pad - hdr, r: x1 + pad, b: y1 + pad };
+}
+
+function boxesOverlap(a: HHBox, b: HHBox): boolean {
+  return a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
+}
+
+function shiftHouseholdX(
+  gid: string,
+  world: string,
+  dx: number,
+  nodes: SimNode[],
+  bases: Map<string, { x: number; y: number; w: number; h: number }>,
+): void {
+  for (const n of nodes) {
+    if (n.gid !== gid || (n.world || OTHER_WORLD) !== world) continue;
+    const b = bases.get(n.id);
+    if (b) b.x += dx;
+  }
+}
+
+function shiftHouseholdY(
+  gid: string,
+  world: string,
+  dy: number,
+  nodes: SimNode[],
+  bases: Map<string, { x: number; y: number; w: number; h: number }>,
+): void {
+  for (const n of nodes) {
+    if (n.gid !== gid || (n.world || OTHER_WORLD) !== world) continue;
+    const b = bases.get(n.id);
+    if (b) b.y += dy;
+  }
+}
+
+/** Guarantee dashed household boxes never overlap in the initial layout. */
+function resolveHouseholdBoxOverlaps(
+  nodes: SimNode[],
+  bases: Map<string, { x: number; y: number; w: number; h: number }>,
+): void {
+  const gap = LAYOUT.hhGap;
+  const worlds = [...new Set(nodes.map((n) => n.world || OTHER_WORLD))];
+  for (const world of worlds) {
+    const gids = [
+      ...new Set(
+        nodes
+          .filter((n) => (n.world || OTHER_WORLD) === world)
+          .map((n) => n.gid),
+      ),
+    ];
+    for (let pass = 0; pass < 48; pass++) {
+      let moved = false;
+      for (let i = 0; i < gids.length; i++) {
+        for (let j = i + 1; j < gids.length; j++) {
+          const ga = gids[i]!;
+          const gb = gids[j]!;
+          const a = householdBox(ga, world, nodes, bases);
+          const b = householdBox(gb, world, nodes, bases);
+          if (!a || !b || !boxesOverlap(a, b)) continue;
+          const dx = a.r - b.l + gap;
+          const dy = a.b - b.t + gap;
+          if (dx > 0 && dx >= dy) {
+            shiftHouseholdX(gb, world, dx, nodes, bases);
+            moved = true;
+          } else if (dy > 0) {
+            shiftHouseholdY(gb, world, dy, nodes, bases);
+            moved = true;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+  }
+}
+
+export function computeLayout(
+  nodes: SimNode[],
+  worlds: World[],
+  edges: Edge[],
+): SimNode[] {
+  const bases = layoutBases(nodes, worlds, edges);
+  return nodes.map((n) => {
+    const base = bases.get(n.id);
+    const size = measureCard(n);
+    if (!base) {
+      return {
+        ...n,
+        w: size.w,
+        h: size.h,
+        x: LAYOUT.originX + (n.ox ?? 0),
+        y: LAYOUT.originY + (n.oy ?? 0),
+      };
+    }
+    return {
+      ...n,
+      w: size.w,
+      h: size.h,
+      x: base.x + (n.ox ?? 0),
+      y: base.y + (n.oy ?? 0),
+    };
+  });
+}

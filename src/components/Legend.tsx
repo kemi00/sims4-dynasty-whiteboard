@@ -1,15 +1,39 @@
+import type { Ref } from 'react';
 import type { World } from '../types/whiteboard.ts';
 
-export function Legend({ worlds }: { worlds: World[] }) {
+type Props = {
+  worlds: World[];
+  /** Worlds with at least one sim currently on the board. */
+  liveWorlds: Set<string>;
+  onPickWorld: (world: string) => void;
+  ref?: Ref<HTMLDivElement>;
+};
+
+export function Legend({ worlds, liveWorlds, onPickWorld, ref }: Props) {
   return (
-    <div id="legend">
+    <div id="legend" ref={ref}>
       <h3>Worlds</h3>
-      {worlds.map((w) => (
-        <div key={w.name} className="lg">
-          <i style={{ background: w.color }} />
-          {w.name}
-        </div>
-      ))}
+      {worlds.map((w) => {
+        const live = liveWorlds.has(w.name);
+        return (
+          <button
+            key={w.name}
+            type="button"
+            className="lg lg--world"
+            /* Nothing to frame when the world's sims are all filtered out. */
+            disabled={!live}
+            title={
+              live
+                ? `Zoom to ${w.name}`
+                : `${w.name} — hidden, its game is switched off`
+            }
+            onClick={() => onPickWorld(w.name)}
+          >
+            <i style={{ background: w.color }} />
+            {w.name}
+          </button>
+        );
+      })}
       <h3 style={{ marginTop: 8 }}>Links</h3>
       <div className="lg">
         <span style={{ fontSize: 13, lineHeight: 1, color: '#3f4756' }}>⊥</span>{' '}

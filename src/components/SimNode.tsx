@@ -1,6 +1,7 @@
 import { memo } from 'react';
-import { COL, OCC, UEDIT } from '../lib/constants.ts';
-import { isUserE } from '../lib/utils.ts';
+import { CARD_H, COL, OCC, SPECIES, UEDIT } from '../lib/constants.ts';
+import { cardDetailLine } from '../lib/layout.ts';
+import { isUserE, isHighlightMatch } from '../lib/utils.ts';
 import type { SimNode } from '../types/whiteboard.ts';
 
 type Props = {
@@ -19,11 +20,22 @@ export const SimNodeView = memo(function SimNodeView({
   onPointerDown,
 }: Props) {
   const added = !!n.added;
-  const fill = added ? '#f4efff' : n.townie ? '#f6f4ef' : '#ffffff';
+  const fill = added ? '#f4efff' : '#ffffff';
   const bcol = added ? UEDIT : n.color;
-  const hasBadge = n.state && n.state !== 'Sim' && OCC[n.state];
+  const speciesBadge = n.species ? SPECIES[n.species] : null;
+  const stateBadge =
+    !speciesBadge && n.state && n.state !== 'Sim' && OCC[n.state]
+      ? OCC[n.state]
+      : null;
+  const hasBadge = !!(speciesBadge || stateBadge);
   const ageClass =
-    hiAges.size > 0 ? (hiAges.has(n.age) ? 'agehl' : 'agedim') : '';
+    hiAges.size > 0
+      ? isHighlightMatch(n, hiAges)
+        ? 'agehl'
+        : 'agedim'
+      : '';
+  const detail = cardDetailLine(n);
+  const h = n.h || CARD_H;
 
   return (
     <g
@@ -36,7 +48,7 @@ export const SimNodeView = memo(function SimNodeView({
         x={0}
         y={0}
         width={n.w}
-        height={n.h}
+        height={h}
         rx={11}
         fill={fill}
         stroke={connectHighlight ? '#1b6cd6' : bcol}
@@ -48,7 +60,7 @@ export const SimNodeView = memo(function SimNodeView({
         x={0}
         y={0}
         width={7}
-        height={n.h}
+        height={h}
         fill={bcol}
         clipPath="url(#tagclip)"
       />
@@ -58,7 +70,13 @@ export const SimNodeView = memo(function SimNodeView({
       <text x={16} y={37} fontSize={10.5} fill="#5b6472">
         {n.age}
         {n.gender && n.gender !== '-' ? ` · ${n.gender}` : ''}
+        {n.species ? ` · ${n.species}` : ''}
       </text>
+      {detail ? (
+        <text x={16} y={53} fontSize={10.5} fill="#697380">
+          {detail}
+        </text>
+      ) : null}
       {hasBadge && (
         <>
           <circle
@@ -75,7 +93,7 @@ export const SimNodeView = memo(function SimNodeView({
             fontSize={11}
             textAnchor="middle"
           >
-            {OCC[n.state]}
+            {speciesBadge ?? stateBadge}
           </text>
         </>
       )}

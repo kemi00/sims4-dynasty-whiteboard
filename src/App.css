@@ -130,11 +130,18 @@ svg{width:100%;height:100%;display:block;touch-action:none}
 #legend h3{margin:0 0 4px;font-size:9px;letter-spacing:.4px;text-transform:uppercase;color:#8a7f63}
 .lg{display:flex;align-items:center;gap:5px;margin:1.5px 0}
 .lg i{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+/* World rows are buttons: picking one frames that world on the canvas. */
+.lg--world{width:100%;margin:1.5px -4px;padding:1.5px 4px;border:0;border-radius:5px;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.lg--world:hover:not(:disabled){background:var(--hover)}
+.lg--world:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
+/* Faded rather than hidden, so the colour key stays readable as a reference. */
+.lg--world:disabled{opacity:.4;cursor:default}
 .node rect{cursor:grab}
 .node.sel>rect:first-of-type{stroke:#1b6cd6!important;stroke-width:4.5px!important;fill:#e9f2ff!important}
 .node.sel{filter:drop-shadow(0 0 0 #1b6cd6) drop-shadow(0 0 7px rgba(27,108,214,.9))}
 .edge.sel .hit{stroke:#1b6cd6}
-.menu,.editor{position:absolute;background:#fff;border:1px solid #cdd3da;border-radius:var(--r-surface);box-shadow:0 8px 24px #0003;padding:6px;z-index:20;font-size:12px;display:none}
+.menu{position:absolute;background:#fff;border:1px solid #cdd3da;border-radius:var(--r-surface);box-shadow:0 8px 24px #0003;padding:6px;z-index:20;font-size:12px;display:none}
+.editor{position:fixed;background:#fff;border:1px solid #cdd3da;border-radius:var(--r-surface);box-shadow:0 8px 24px #0003;padding:6px;z-index:50;font-size:12px;display:none}
 .menu button{display:block;width:100%;text-align:left;margin:2px 0;border:none;background:#f5f6f8}
 .gpanel{position:fixed;z-index:60;background:#fff;border:1px solid var(--line);border-radius:var(--r-surface);box-shadow:0 12px 34px #0003;padding:9px;font-size:12px;max-height:74vh;overflow:auto;width:256px;display:none}
 .gpanel .gph{display:flex;justify-content:space-between;align-items:center;margin:2px 4px 8px;font-size:11px;color:#5a6673}
@@ -154,7 +161,7 @@ svg{width:100%;height:100%;display:block;touch-action:none}
 .agechips button{padding:5px 10px;border:1px solid #e0d8c6;background:#faf7f0;color:#3b4757;border-radius:16px;font-weight:600}
 .agechips button.on{background:#f5a300;color:#fff;border-color:#f5a300}
 .menu button:hover{background:#e7eefb}
-.editor{padding:10px;width:252px;max-height:calc(100% - 16px);overflow:auto}
+.editor{padding:10px;width:252px;max-height:calc(100vh - 16px);overflow:auto}
 .editor label{display:block;font-size:10px;color:#667;margin:7px 0 2px;text-transform:uppercase;letter-spacing:.3px}
 .editor input,.editor select{width:100%;padding:5px;border:1px solid #cdd3da;border-radius:6px;font-size:12px;box-sizing:border-box}
 .editor .row{display:flex;gap:6px;margin-top:10px}

@@ -1,4 +1,4 @@
-import { BAND, MINDROP, STUB } from './constants.ts';
+import { BAND, MINDROP, PILL_DROP, STUB } from './constants.ts';
 import {
   buildRects,
   edgeVisible,
@@ -231,76 +231,121 @@ export function orthPath(
   );
 }
 
+/** Child sits in a lower generation row (top at or below the anchor). */
+function childBelowAnchor(ay: number, child: SimNode): boolean {
+  return child.y >= ay - STUB;
+}
+
+/** Group children by household so buses don't span unrelated distant cards. */
+function clusterKidsByHousehold(kids: SimNode[]): SimNode[][] {
+  const byGid = new Map<string, SimNode[]>();
+  for (const n of kids) {
+    if (!byGid.has(n.gid)) byGid.set(n.gid, []);
+    byGid.get(n.gid)!.push(n);
+  }
+  return [...byGid.values()];
+}
+
+/** Pedigree fork: trunk ↓, per-household bus, drops into child tops. */
+function drawPedigreeFork(
+  ax: number,
+  ay: number,
+  belowK: SimNode[],
+  pEB: Record<string, string[]>,
+  exBase: string[],
+  ctx: RoutingContext,
+  blood: BloodPath[],
+  parentBusKids: Set<string>,
+  byid: Record<string, SimNode>,
+): void {
+  if (!belowK.length) return;
+  const laneTop = Math.min(...belowK.map((n) => n.y - STUB));
+  const bus = laneBus(ax, ay, belowK, exBase, ctx);
+  const forkY = bus ?? Math.min(ay + MINDROP, laneTop);
+
+  blood.push({
+    ids: belowK.length === 1 ? pEB[belowK[0]!.id] || [] : [],
+    pts: [
+      [ax, ay],
+      [ax, forkY],
+    ],
+  });
+
+  for (const cluster of clusterKidsByHousehold(belowK)) {
+    if (cluster.length === 1) {
+      const n = cluster[0]!;
+      const cx = n.x + n.w / 2;
+      parentBusKids.add(n.id);
+      const leg: Point[] = [[cx, forkY], [cx, n.y]];
+      if (Math.abs(cx - ax) > 0.5) leg.unshift([ax, forkY]);
+      blood.push({ ids: pEB[n.id] || [], pts: simplify(leg) });
+      continue;
+    }
+
+    const cxs = cluster.map((n) => n.x + n.w / 2);
+    const minx = Math.min(...cxs);
+    const maxx = Math.max(...cxs);
+    const busSeg: Point[] = [];
+    if (ax < minx - 0.5) busSeg.push([ax, forkY], [minx, forkY]);
+    else if (ax > maxx + 0.5) busSeg.push([ax, forkY], [maxx, forkY]);
+    if (maxx - minx > 0.5) busSeg.push([minx, forkY], [maxx, forkY]);
+    if (busSeg.length) blood.push({ ids: [], pts: simplify(busSeg) });
+
+    for (const n of cluster) {
+      const cx = n.x + n.w / 2;
+      parentBusKids.add(n.id);
+      blood.push({
+        ids: pEB[n.id] || [],
+        pts: [
+          [cx, forkY],
+          [cx, n.y],
+        ],
+      });
+    }
+  }
+}
+
+/** Pedigree T: trunk → horizontal bus → drop into the child's top center. */
+function pedigreeDrop(
+  ax: number,
+  ay: number,
+  child: SimNode,
+  forkY?: number,
+): Point[] {
+  const cx = child.x + child.w / 2;
+  const top = child.y;
+  const lane = forkY ?? Math.min(ay + MINDROP, top - STUB);
+  const bus = Math.min(lane, top - STUB);
+  return simplify([
+    [ax, ay],
+    [ax, bus],
+    [cx, bus],
+    [cx, top],
+  ]);
+}
+
 export function childRoute(
   ax: number,
   ay: number,
   child: SimNode,
-  exIds: string[],
-  ctx: RoutingContext,
+  _exIds: string[],
+  _ctx: RoutingContext,
 ): Point[] {
-  const ex = new Set(exIds);
   const cx = child.x + child.w / 2;
   const top = child.y;
-  const ts = top - STUB;
-  const { rbands, fastRoute } = ctx;
-  if (fastRoute) {
-    if (ts >= ay) {
-      return simplify([
-        [ax, ay],
-        [ax, ts],
-        [cx, ts],
-        [cx, top],
-      ]);
-    }
-    return simplify([
-      [ax, ay],
-      [ax, ay + MINDROP],
-      [cx, ay + MINDROP],
-      [cx, ts],
-      [cx, top],
-    ]);
+
+  if (childBelowAnchor(ay, child)) {
+    return pedigreeDrop(ax, ay, child);
   }
-  const exNoChild = [...ex].filter((id) => id !== child.id);
-  // Equality matters: a fork that already sits exactly on the child's lane
-  // still routes straight across, and simplify() drops the zero-length stem.
-  if (ts >= ay) {
-    const pts: Point[] = [
-      [ax, ay],
-      [ax, ts],
-      [cx, ts],
-      [cx, top],
-    ];
-    if (ptsClear(pts, rbands, ex)) return simplify(pts);
-    const forkY = Math.min(ay + MINDROP, ts - 2);
-    const r = orthPath([ax, forkY], [cx, ts], exNoChild, ctx);
-    r.unshift([ax, ay]);
-    r.push([cx, top]);
-    return simplify(r);
-  }
-  const riseCands =
-    cx >= ax
-      ? [child.x - 22, child.x + child.w + 22]
-      : [child.x + child.w + 22, child.x - 22];
-  for (const riseX of riseCands) {
-    for (let low = ay + MINDROP; low <= ay + MINDROP + 150; low += 13) {
-      for (let up = ts; up >= ts - 90; up -= 13) {
-        const pts: Point[] = [
-          [ax, ay],
-          [ax, low],
-          [riseX, low],
-          [riseX, up],
-          [cx, up],
-          [cx, top],
-        ];
-        if (ptsClear(pts, rbands, ex)) return simplify(pts);
-      }
-    }
-  }
-  const forkY = ay + MINDROP;
-  const r = orthPath([ax, forkY], [cx, ts], exNoChild, ctx);
-  r.unshift([ax, ay]);
-  r.push([cx, top]);
-  return simplify(r);
+
+  // Cross-household / same-row: down from anchor, across, up into child top.
+  const lane = Math.max(ay + MINDROP, Math.min(child.y - STUB, ay + 120));
+  return simplify([
+    [ax, ay],
+    [ax, lane],
+    [cx, lane],
+    [cx, top],
+  ]);
 }
 
 export function laneBus(
@@ -410,6 +455,33 @@ export interface ComputeEdgeRenderInput {
   fastRoute: boolean;
 }
 
+function parentSetKey(parentsOf: Record<string, string[]>, id: string): string {
+  return (parentsOf[id] || []).slice().sort().join('|');
+}
+
+/** Shared parent set → sibling connector is implied by the parent fork. */
+function impliedSiblings(
+  members: string[],
+  parentsOf: Record<string, string[]>,
+): boolean {
+  if (members.length < 2) return false;
+  const keys = members.map((m) => parentSetKey(parentsOf, m));
+  const k0 = keys[0];
+  return !!k0 && keys.every((k) => k === k0);
+}
+
+/** Child was raised in another household — parent line must still draw. */
+function crossHouseholdChild(
+  child: SimNode,
+  ps: string[],
+  byid: Record<string, SimNode>,
+): boolean {
+  return ps.some((pid) => {
+    const p = byid[pid];
+    return p && p.gid !== child.gid;
+  });
+}
+
 /** Pure routing pass — returns geometry instead of mutating the DOM. */
 export function computeEdgeRenderData(
   input: ComputeEdgeRenderInput,
@@ -488,12 +560,13 @@ export function computeEdgeRenderData(
     { parents: string[]; kids: string[] }
   > = {};
   Object.keys(parentsOf).forEach((c) => {
-    const ps = parentsOf[c]!.slice().sort();
+    const ps = (parentsOf[c] || []).slice().sort();
     const key = ps.join('|');
     (fam[key] = fam[key] || { parents: ps, kids: [] }).kids.push(c);
   });
 
   const BLOOD: BloodPath[] = [];
+  const parentBusKids = new Set<string>();
 
   Object.values(fam).forEach((f) => {
     const kids = f.kids.filter((c) => byid[c]);
@@ -506,8 +579,14 @@ export function computeEdgeRenderData(
     if (isCouple) {
       const a = uAnchor[uKey(ps[0]!, ps[1]!)]!;
       ax = a.rx;
-      ay = a.ry + 12;
+      ay = a.ry + PILL_DROP;
       exBase = [ps[0]!, ps[1]!].concat(mObs[uKey(ps[0]!, ps[1]!)] || []);
+    } else if (ps.length === 2 && byid[ps[0]!] && byid[ps[1]!]) {
+      const p0 = byid[ps[0]!]!;
+      const p1 = byid[ps[1]!]!;
+      ax = (p0.x + p0.w / 2 + p1.x + p1.w / 2) / 2;
+      ay = Math.max(p0.y + p0.h, p1.y + p1.h);
+      exBase = [ps[0]!, ps[1]!];
     } else if (ps.length === 1 && byid[ps[0]!]) {
       const p = byid[ps[0]!]!;
       ax = p.x + p.w / 2;
@@ -528,30 +607,47 @@ export function computeEdgeRenderData(
       });
       return;
     }
-    const kn = kids.map((c) => byid[c]!);
-    const belowK = kn.filter((n) => n.y > ay + STUB);
-    const sideK = kn.filter((n) => !(n.y > ay + STUB));
-    if (belowK.length) {
-      // The shared trunk must stop at or above the shallowest child's entry
-      // lane. Dropping the full MINDROP past it would force that child's route
-      // to climb back up, doubling the connector back on itself.
-      const laneTop = Math.min(...belowK.map((n) => n.y - STUB));
-      const forkY = Math.min(ay + MINDROP, laneTop);
-      BLOOD.push({
-        ids: belowK.length === 1 ? pEB[belowK[0]!.id] || [] : [],
-        pts: [
-          [ax, ay],
-          [ax, forkY],
-        ],
+    const kn = kids
+      .map((c) => byid[c]!)
+      .filter((n) => {
+        const parentNodes = ps.map((id) => byid[id]).filter(Boolean);
+        if (!parentNodes.length) return true;
+        if (crossHouseholdChild(n, ps, byid)) return true;
+        const parentBottom = Math.max(...parentNodes.map((p) => p.y + p.h));
+        return n.y + n.h > parentBottom + STUB;
       });
-      belowK.forEach((n) => {
-        BLOOD.push({
-          ids: pEB[n.id] || [],
-          pts: childRoute(ax, forkY, n, exBase.concat([n.id]), ctx),
-        });
-      });
+    if (!kn.length) return;
+    const belowK = kn.filter((n) => childBelowAnchor(ay, n));
+    const sideK = kn.filter((n) => !childBelowAnchor(ay, n));
+    /** Cross-household kids get their own drop — no shared horizontal bus. */
+    const inHHBelow = belowK.filter((n) => !crossHouseholdChild(n, ps, byid));
+    const crossHHBelow = belowK.filter((n) => crossHouseholdChild(n, ps, byid));
+    if (inHHBelow.length) {
+      drawPedigreeFork(
+        ax,
+        ay,
+        inHHBelow,
+        pEB,
+        exBase,
+        ctx,
+        BLOOD,
+        parentBusKids,
+        byid,
+      );
     }
+    crossHHBelow.forEach((n) => {
+      parentBusKids.add(n.id);
+      BLOOD.push({
+        ids: pEB[n.id] || [],
+        pts: childRoute(ax, ay, n, exBase.concat([n.id]), ctx),
+      });
+    });
     sideK.forEach((n) => {
+      if (!crossHouseholdChild(n, ps, byid)) {
+        const parentNodes = ps.map((id) => byid[id]).filter(Boolean);
+        const parentBottom = Math.max(...parentNodes.map((p) => p.y + p.h));
+        if (n.y + n.h <= parentBottom + STUB) return;
+      }
       BLOOD.push({
         ids: pEB[n.id] || [],
         pts: childRoute(ax, ay, n, exBase.concat([n.id]), ctx),
@@ -590,6 +686,9 @@ export function computeEdgeRenderData(
     comps.forEach((members) => {
       const ms = members.filter((m) => byid[m]);
       if (ms.length < 2) return;
+      if (impliedSiblings(ms, parentsOf) || ms.every((m) => parentBusKids.has(m))) {
+        return;
+      }
       const cxs = ms.map((m) => byid[m]!.x + byid[m]!.w / 2);
       const barY = Math.min(...ms.map((m) => byid[m]!.y)) - 28;
       const minx = Math.min(...cxs);

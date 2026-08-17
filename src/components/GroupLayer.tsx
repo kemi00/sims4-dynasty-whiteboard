@@ -1,4 +1,5 @@
 import type { Group, SimNode } from '../types/whiteboard.ts';
+import { LAYOUT } from '../lib/layout.ts';
 
 type Props = {
   groups: Group[];
@@ -9,7 +10,7 @@ type Props = {
     gid: string,
     wx: number,
     wy: number,
-    base: Record<string, { x: number; y: number }>,
+    base: Record<string, { ox: number; oy: number }>,
   ) => void;
 };
 
@@ -37,8 +38,8 @@ export function GroupLayer({
           x1 = Math.max(x1, n.x + n.w);
           y1 = Math.max(y1, n.y + n.h);
         });
-        const pad = 16;
-        const HDROFF = 40;
+        const pad = LAYOUT.hhPad;
+        const HDROFF = LAYOUT.hhHeader;
         const label = [
           g0.hh,
           g0.nb && g0.nb !== '-' && g0.nb !== g0.world ? g0.nb : null,
@@ -67,9 +68,10 @@ export function GroupLayer({
               style={{ cursor: 'grab' }}
               onPointerDown={(ev) => {
                 ev.stopPropagation();
-                const base: Record<string, { x: number; y: number }> = {};
+                const base: Record<string, { ox: number; oy: number }> = {};
                 nodes.forEach((n) => {
-                  if (n.gid === g0.gid) base[n.id] = { x: n.x, y: n.y };
+                  if (n.gid === g0.gid)
+                    base[n.id] = { ox: n.ox ?? 0, oy: n.oy ?? 0 };
                 });
                 const svg = (ev.target as Element).closest('svg');
                 const r = svg!.getBoundingClientRect();

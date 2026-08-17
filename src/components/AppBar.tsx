@@ -3,6 +3,7 @@ import {
   Globe,
   Highlighter,
   House,
+  IdentificationBadge,
   LinkSimple,
   MagnifyingGlass,
   Trash,
@@ -18,10 +19,12 @@ type Props = {
   svgRef: React.RefObject<SVGSVGElement | null>;
   gamesBtnRef: React.RefObject<HTMLButtonElement | null>;
   agesBtnRef: React.RefObject<HTMLButtonElement | null>;
+  playBtnRef: React.RefObject<HTMLButtonElement | null>;
 };
 
-export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef }: Props) {
+export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef, playBtnRef }: Props) {
   const hiddenCount = wb.hiddenPacks.size;
+  const playHidden = wb.hiddenPlay.size;
   const ageCount = wb.hiAges.size;
 
   const svgSize = () => {
@@ -113,10 +116,31 @@ export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef }: Props) {
         expanded={wb.gamesOpen}
         onClick={() => {
           wb.setAgesOpen(false);
+          wb.setPlayOpen(false);
           wb.setGamesOpen(!wb.gamesOpen);
         }}
       >
         Games
+      </ToolButton>
+      <ToolButton
+        id="btnPlay"
+        ref={playBtnRef}
+        icon={IdentificationBadge}
+        label={
+          playHidden
+            ? `Playability. ${playHidden} hidden.`
+            : 'Playability'
+        }
+        pressed={playHidden > 0}
+        count={playHidden}
+        expanded={wb.playOpen}
+        onClick={() => {
+          wb.setGamesOpen(false);
+          wb.setAgesOpen(false);
+          wb.setPlayOpen(!wb.playOpen);
+        }}
+      >
+        Play
       </ToolButton>
       <ToolButton
         id="btnAges"
@@ -132,6 +156,7 @@ export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef }: Props) {
         expanded={wb.agesOpen}
         onClick={() => {
           wb.setGamesOpen(false);
+          wb.setPlayOpen(false);
           wb.setAgesOpen(!wb.agesOpen);
         }}
       >

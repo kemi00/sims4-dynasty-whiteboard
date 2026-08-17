@@ -1,13 +1,24 @@
 import { Info, X } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export function Hint() {
   const [collapsed, setCollapsed] = useState(false);
+  const hintRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setCollapsed(true), 3000);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    if (collapsed) return;
+    const onPointer = (ev: PointerEvent) => {
+      if (hintRef.current?.contains(ev.target as Node)) return;
+      setCollapsed(true);
+    };
+    document.addEventListener('pointerdown', onPointer, true);
+    return () => document.removeEventListener('pointerdown', onPointer, true);
+  }, [collapsed]);
 
   if (collapsed) {
     return (
@@ -28,7 +39,7 @@ export function Hint() {
   }
 
   return (
-    <div id="hint">
+    <div id="hint" ref={hintRef}>
       <button
         id="hintClose"
         type="button"

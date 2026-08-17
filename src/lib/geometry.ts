@@ -4,9 +4,12 @@ import {
   GRID,
   PILL_HALF_W,
   RGAP,
+  SNAP_HYST,
+  SNAP_RANGE,
   STUB,
   UNION_MIN_GAP,
 } from './constants.ts';
+import { LAYOUT } from './layout.ts';
 import type {
   BuildRectsResult,
   Edge,
@@ -48,7 +51,50 @@ export function edgeVisible(e: Edge, show: ShowToggles): boolean {
   return true;
 }
 
-export function snapAxis(v: number, edges: number[]): number {
+export type SnapSticky = { x: number | null; y: number | null };
+
+function collectSnapEdges(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  nodes: SimNode[],
+  excludeId?: string,
+): { xe: number[]; ye: number[] } {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const xe = new Set<number>();
+  const ye = new Set<number>();
+
+  for (const o of nodes) {
+    if (o.id === excludeId) continue;
+    const ocx = o.x + o.w / 2;
+    const ocy = o.y + o.h / 2;
+    if (
+      Math.abs(ocx - cx) > SNAP_RANGE + (o.w + w) / 2 ||
+      Math.abs(ocy - cy) > SNAP_RANGE + (o.h + h) / 2
+    ) {
+      continue;
+    }
+    xe.add(o.x);
+    xe.add(o.x + o.w - w);
+    xe.add(o.x + o.w / 2 - w / 2);
+    ye.add(o.y);
+    ye.add(o.y + o.h - h);
+    ye.add(o.y + o.h / 2 - h / 2);
+  }
+  return { xe: [...xe], ye: [...ye] };
+}
+
+function snapAxisSticky(
+  v: number,
+  edges: number[],
+  sticky: number | null,
+): { v: number; guide: number | null; sticky: number | null } {
+  if (sticky !== null && Math.abs(v - sticky) <= ALIGN_TH + SNAP_HYST) {
+    return { v: Math.round(sticky), guide: sticky, sticky };
+  }
+
   let best: number | null = null;
   let bd = ALIGN_TH + 1;
   for (const e of edges) {
@@ -58,7 +104,72 @@ export function snapAxis(v: number, edges: number[]): number {
       best = e;
     }
   }
-  return best !== null ? Math.round(best) : Math.round(v / GRID) * GRID;
+  if (best !== null) {
+    return { v: Math.round(best), guide: best, sticky: best };
+  }
+  return { v: Math.round(v / GRID) * GRID, guide: null, sticky: null };
+}
+
+export function snapAxis(v: number, edges: number[]): number {
+  return snapAxisSticky(v, edges, null).v;
+}
+
+/** Alignment guides for a rectangle near other nodes (within ALIGN_TH). */
+export function guidesForRect(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  nodes: SimNode[],
+  excludeId?: string,
+  th = ALIGN_TH,
+): Guides {
+  const gx = new Set<number>();
+  const gy = new Set<number>();
+  const L = [x, x + w / 2, x + w];
+  const T = [y, y + h / 2, y + h];
+  for (const o of nodes) {
+    if (o.id === excludeId) continue;
+    [o.x, o.x + o.w / 2, o.x + o.w].forEach((v) =>
+      L.forEach((l) => {
+        if (Math.abs(v - l) <= th) gx.add(v);
+      }),
+    );
+    [o.y, o.y + o.h / 2, o.y + o.h].forEach((v) =>
+      T.forEach((t) => {
+        if (Math.abs(v - t) <= th) gy.add(v);
+      }),
+    );
+  }
+  return { gx: [...gx], gy: [...gy] };
+}
+
+/** Snap a top-left position; guides show only the active snap target (0–2 lines). */
+export function snapPosition(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  nodes: SimNode[],
+  excludeId?: string,
+  snap = true,
+  sticky: SnapSticky = { x: null, y: null },
+): { x: number; y: number; guides: Guides; sticky: SnapSticky } {
+  if (!snap) {
+    return { x, y, guides: { gx: [], gy: [] }, sticky: { x: null, y: null } };
+  }
+  const { xe, ye } = collectSnapEdges(x, y, w, h, nodes, excludeId);
+  const sx = snapAxisSticky(x, xe, sticky.x);
+  const sy = snapAxisSticky(y, ye, sticky.y);
+  return {
+    x: sx.v,
+    y: sy.v,
+    guides: {
+      gx: sx.guide !== null ? [sx.guide] : [],
+      gy: sy.guide !== null ? [sy.guide] : [],
+    },
+    sticky: { x: sx.sticky, y: sy.sticky },
+  };
 }
 
 export function snapNode(
@@ -66,37 +177,13 @@ export function snapNode(
   nodes: SimNode[],
   snap = true,
 ): void {
-  if (!snap) return;
-  const xe: number[] = [];
-  const ye: number[] = [];
-  for (const o of nodes) {
-    if (o === n) continue;
-    xe.push(o.x, o.x + o.w - n.w, o.x + o.w / 2 - n.w / 2);
-    ye.push(o.y, o.y + o.h - n.h, o.y + o.h / 2 - n.h / 2);
-  }
-  n.x = snapAxis(n.x, xe);
-  n.y = snapAxis(n.y, ye);
+  const { x, y } = snapPosition(n.x, n.y, n.w, n.h, nodes, n.id, snap);
+  n.x = x;
+  n.y = y;
 }
 
 export function guidesFor(n: SimNode, nodes: SimNode[]): Guides {
-  const gx = new Set<number>();
-  const gy = new Set<number>();
-  const L = [n.x, n.x + n.w / 2, n.x + n.w];
-  const T = [n.y, n.y + n.h / 2, n.y + n.h];
-  for (const o of nodes) {
-    if (o === n) continue;
-    [o.x, o.x + o.w / 2, o.x + o.w].forEach((v) =>
-      L.forEach((l) => {
-        if (Math.abs(v - l) < 1) gx.add(v);
-      }),
-    );
-    [o.y, o.y + o.h / 2, o.y + o.h].forEach((v) =>
-      T.forEach((t) => {
-        if (Math.abs(v - t) < 1) gy.add(v);
-      }),
-    );
-  }
-  return { gx: [...gx], gy: [...gy] };
+  return guidesForRect(n.x, n.y, n.w, n.h, nodes, n.id);
 }
 
 /** Node-bounds box for a household (used by snapHousehold). */
@@ -131,8 +218,8 @@ export function hhBoxDraw(
     y1 = Math.max(y1, n.y + n.h);
   });
   const g0 = groups.find((g) => g.gid === gid);
-  const pad = 16;
-  const HDROFF = 40;
+  const pad = LAYOUT.hhPad;
+  const HDROFF = LAYOUT.hhHeader;
   const label = [
     g0?.hh,
     g0?.nb && g0.nb !== '-' && g0.nb !== g0.world ? g0.nb : null,
@@ -145,63 +232,84 @@ export function hhBoxDraw(
   return { l: x0 - pad, t: y0 - pad - HDROFF, r: x0 - pad + boxW, b: y1 + pad };
 }
 
-export function snapHousehold(
+const HH_SNAP_TH = 16;
+
+function hhBoxesNear(b: HhBox, range: number): (o: HhBox) => boolean {
+  return (o) =>
+    !(
+      o.maxx + range < b.minx ||
+      o.minx - range > b.maxx ||
+      o.maxy + range < b.miny ||
+      o.miny - range > b.maxy
+    );
+}
+
+/** Snap a household drag delta; does not mutate nodes. */
+export function snapHouseholdDelta(
   gid: string,
   nodes: SimNode[],
+  dx: number,
+  dy: number,
   snap = true,
-): Guides | null {
+): { dx: number; dy: number; guides: Guides } | null {
   if (!snap) return null;
-  const b = hhBox(gid, nodes);
-  if (!b) return null;
+  const members = nodes.filter((n) => n.gid === gid);
+  if (!members.length) return null;
+  const b = {
+    minx: Math.min(...members.map((n) => n.x + dx)),
+    miny: Math.min(...members.map((n) => n.y + dy)),
+    maxx: Math.max(...members.map((n) => n.x + n.w + dx)),
+    maxy: Math.max(...members.map((n) => n.y + n.h + dy)),
+  };
   const others = [
     ...new Set(nodes.filter((n) => n.gid !== gid).map((n) => n.gid)),
   ]
     .map((g) => hhBox(g, nodes))
-    .filter((x): x is HhBox => x !== null);
-  const TH = 16;
-  let ox: number | null = null;
-  let bd = TH + 1;
+    .filter((x): x is HhBox => x !== null)
+    .filter(hhBoxesNear(b, SNAP_RANGE));
+
+  let snapDx = 0;
+  let guideX: number | null = null;
+  let bd = HH_SNAP_TH + 1;
   others.forEach((o) => {
     [o.minx - b.minx, o.maxx - b.maxx].forEach((off) => {
       if (Math.abs(off) < bd) {
         bd = Math.abs(off);
-        ox = off;
+        snapDx = off;
+        guideX = off === o.minx - b.minx ? o.minx : o.maxx;
       }
     });
   });
-  if (ox === null) ox = Math.round(b.minx / GRID) * GRID - b.minx;
-  let oy: number | null = null;
-  bd = TH + 1;
+  if (bd > HH_SNAP_TH) {
+    snapDx = Math.round(b.minx / GRID) * GRID - b.minx;
+    guideX = null;
+  }
+
+  let snapDy = 0;
+  let guideY: number | null = null;
+  bd = HH_SNAP_TH + 1;
   others.forEach((o) => {
     [o.miny - b.miny, o.maxy - b.maxy].forEach((off) => {
       if (Math.abs(off) < bd) {
         bd = Math.abs(off);
-        oy = off;
+        snapDy = off;
+        guideY = off === o.miny - b.miny ? o.miny : o.maxy;
       }
     });
   });
-  if (oy === null) oy = Math.round(b.miny / GRID) * GRID - b.miny;
-  nodes.forEach((n) => {
-    if (n.gid === gid) {
-      n.x = Math.round(n.x + ox!);
-      n.y = Math.round(n.y + oy!);
-    }
-  });
-  const gx: number[] = [];
-  const gy: number[] = [];
-  const nb = {
-    minx: b.minx + ox,
-    maxx: b.maxx + ox,
-    miny: b.miny + oy,
-    maxy: b.maxy + oy,
+  if (bd > HH_SNAP_TH) {
+    snapDy = Math.round(b.miny / GRID) * GRID - b.miny;
+    guideY = null;
+  }
+
+  return {
+    dx: dx + snapDx,
+    dy: dy + snapDy,
+    guides: {
+      gx: guideX !== null ? [guideX] : [],
+      gy: guideY !== null ? [guideY] : [],
+    },
   };
-  others.forEach((o) => {
-    if (Math.abs(o.minx - nb.minx) < 1) gx.push(o.minx);
-    if (Math.abs(o.maxx - nb.maxx) < 1) gx.push(o.maxx);
-    if (Math.abs(o.miny - nb.miny) < 1) gy.push(o.miny);
-    if (Math.abs(o.maxy - nb.maxy) < 1) gy.push(o.maxy);
-  });
-  return { gx, gy };
 }
 
 /**
@@ -220,13 +328,15 @@ export function unionGeom(a: SimNode, b: SimNode): UnionGeom {
   const rx = (sx + ex) / 2;
   const ry = (sy + ey) / 2;
   const gap = ex - sx;
+  const sameRow = Math.abs(sy - ey) < 12;
+
+  // Same-generation partners: one straight horizontal between inner edges (∞ sits on midpoint).
+  if (sameRow && ex > sx) {
+    const pts = `${sx},${ry} ${ex},${ry}`;
+    return { sx, sy: ry, ex, ey: ry, rx, ry, pts };
+  }
 
   if (gap >= UNION_MIN_GAP) {
-    // The tags face each other with room to spare, so the pill drops straight
-    // into the gap: out of L's right edge, into the pill's left edge, out of
-    // the pill's right edge, into R's left edge. Every x stays inside the gap,
-    // so the run at ry never reaches either tag. The gap floor guarantees the
-    // jogs land clear of the pill rather than cutting across it.
     const S = Math.min(STUB, gap / 2);
     const lx = rx - S;
     const rxx = rx + S;
@@ -234,16 +344,7 @@ export function unionGeom(a: SimNode, b: SimNode): UnionGeom {
     return { sx, sy, ex, ey, rx, ry, pts };
   }
 
-  // Too tight for the pill to sit between the facing edges, so it has to be
-  // reached from further out. Where it goes depends on whether anything can
-  // pass between the tags at all.
   if (Math.min(L.y + L.h, R.y + R.h) < Math.max(L.y, R.y)) {
-    // The tags are vertically apart, so the corridor between them is clear and
-    // the pill stays on it at the midpoint. Overshoot just past the pill and
-    // come back in, keeping the whole detour local to the pill instead of
-    // spanning both tags. With a real (if narrow) gap the left tag is the one
-    // that stems out to the right; when the tags overlap horizontally "left" is
-    // meaningless, so the upper tag takes that role.
     const first = gap < 0 && sy > ey ? R : L;
     const second = first === L ? R : L;
     const fx = first.x + first.w;
@@ -256,10 +357,6 @@ export function unionGeom(a: SimNode, b: SimNode): UnionGeom {
     return { sx: fx, sy: fy, ex: gx, ey: gy, rx, ry, pts };
   }
 
-  // The tags overlap on both axes, so nothing fits between them. Bridge over
-  // the top or under the bottom, whichever is nearer, and leave through the
-  // outward-facing side of each tag: heading inward would only run into the
-  // other tag.
   const bx = L.x;
   const bex = Math.max(L.x + L.w, R.x + R.w);
   const outL = bx - STUB;

@@ -1,4 +1,5 @@
 import { hhBoxDraw } from '../lib/geometry.ts';
+import { LAYOUT } from '../lib/layout.ts';
 import { worldColor } from '../lib/utils.ts';
 import type { Group, SimNode, World } from '../types/whiteboard.ts';
 
@@ -12,7 +13,7 @@ type Props = {
     world: string,
     wx: number,
     wy: number,
-    base: Record<string, { x: number; y: number }>,
+    base: Record<string, { ox: number; oy: number }>,
   ) => void;
 };
 
@@ -52,8 +53,8 @@ export function WorldLayer({
         });
         if (!any) return null;
         const col = worldColor(w, worlds);
-        const M = 14;
-        const TITLE = 32;
+        const M = LAYOUT.worldMargin;
+        const TITLE = LAYOUT.worldTitle;
         const bx = x0 - M;
         const by = y0 - TITLE;
         const bw = x1 - x0 + M * 2;
@@ -77,9 +78,10 @@ export function WorldLayer({
               style={{ cursor: 'grab' }}
               onPointerDown={(ev) => {
                 ev.stopPropagation();
-                const base: Record<string, { x: number; y: number }> = {};
+                const base: Record<string, { ox: number; oy: number }> = {};
                 nodes.forEach((n) => {
-                  if (n.world === w) base[n.id] = { x: n.x, y: n.y };
+                  if (n.world === w)
+                    base[n.id] = { ox: n.ox ?? 0, oy: n.oy ?? 0 };
                 });
                 const svg = (ev.target as Element).closest('svg');
                 const r = svg!.getBoundingClientRect();

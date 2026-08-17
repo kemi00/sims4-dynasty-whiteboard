@@ -3,6 +3,8 @@ type Props = {
   bName: string;
   left: number;
   top: number;
+  /** Hide sibling option when both sims already share parents on the board. */
+  hideSibling?: boolean;
   onConfirm: (type: string) => void;
   onCancel: () => void;
 };
@@ -28,9 +30,13 @@ export function ConnectMenu({
   bName,
   left,
   top,
+  hideSibling,
   onConfirm,
   onCancel,
 }: Props) {
+  const options = hideSibling
+    ? OPTIONS.filter(([ty]) => ty !== 'sibling')
+    : OPTIONS;
   return (
     <div
       id="menu"
@@ -40,7 +46,7 @@ export function ConnectMenu({
       <div style={{ fontSize: 10, color: '#889', padding: '2px 4px' }}>
         {aName} ↔ {bName}
       </div>
-      {OPTIONS.map(([ty, lab]) => (
+      {options.map(([ty, lab]) => (
         <button key={ty} onClick={() => onConfirm(ty)}>
           {labelFor(ty, aName, bName, lab)}
         </button>

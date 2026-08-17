@@ -6,7 +6,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { border, unionGeom } from '../lib/geometry.ts';
-import { isUserE } from '../lib/utils.ts';
+import { CARD_H } from '../lib/constants.ts';
+import { isUserE, siblingsShareParents } from '../lib/utils.ts';
 import type { WhiteboardApi } from '../hooks/useWhiteboard.ts';
 import type { SimNode } from '../types/whiteboard.ts';
 import { ConnectMenu } from './ConnectMenu.tsx';
@@ -36,6 +37,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     y2: number;
   } | null>(null);
   const [editorPos, setEditorPos] = useState({ left: 0, top: 0 });
+  const editorRef = useRef<HTMLDivElement>(null);
 
   const panRef = useRef<{
     x: number;
@@ -47,20 +49,22 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     n: SimNode;
     dx: number;
     dy: number;
+    sticky: SnapSticky;
   } | null>(null);
+  const legendRef = useRef<HTMLDivElement>(null);
   const movedRef = useRef(false);
   const lastClickRef = useRef<{ id: string; t: number } | null>(null);
   const hhDragRef = useRef<{
     gid: string;
     sx: number;
     sy: number;
-    base: Record<string, { x: number; y: number }>;
+    base: Record<string, { ox: number; oy: number }>;
   } | null>(null);
   const worldDragRef = useRef<{
     world: string;
     sx: number;
     sy: number;
-    base: Record<string, { x: number; y: number }>;
+    base: Record<string, { ox: number; oy: number }>;
   } | null>(null);
 
   const { tx, ty, k } = wb.viewport;
@@ -77,23 +81,66 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     if (!wb.editNodeId || !wb.byid[wb.editNodeId]) return;
     const n = wb.byid[wb.editNodeId]!;
     const r = svgRef.current!.getBoundingClientRect();
-    const sr = stageRef.current!.getBoundingClientRect();
-    const ew = 252;
-    const eh = 200;
-    const nx = tx + n.x * k;
-    const ny = ty + n.y * k;
+    const pad = 8;
+    const gap = 12;
+    const ew = editorRef.current?.offsetWidth ?? 272;
+    const eh = editorRef.current?.offsetHeight ?? 420;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    const nx = r.left + tx + n.x * k;
+    const ny = r.top + ty + n.y * k;
     const nw = n.w * k;
-    let left = nx + nw + 12;
+
+    let left = nx + nw + gap;
+    if (left + ew > vw - pad) left = nx - ew - gap;
+    if (left + ew > vw - pad) left = vw - ew - pad;
+    if (left < pad) left = pad;
+
     let top = ny;
-    if (left + ew > r.width - 8) left = nx - ew - 12;
-    if (top + eh > r.height - 8) top = r.height - eh - 8;
-    if (top < 8) top = 8;
-    setEditorPos({ left: left + r.left - sr.left, top: top + r.top - sr.top });
-  }, [wb.editNodeId, wb.byid, tx, ty, k, svgRef, stageRef]);
+    if (top + eh > vh - pad) top = vh - eh - pad;
+    if (top < pad) top = pad;
+
+    setEditorPos({ left, top });
+  }, [wb.editNodeId, wb.byid, tx, ty, k, svgRef]);
 
   useEffect(() => {
     positionEditor();
   }, [positionEditor, wb.viewport, wb.editNodeId]);
+
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el || !wb.editNodeId) return;
+    const ro = new ResizeObserver(() => positionEditor());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [wb.editNodeId, positionEditor]);
+
+  useEffect(() => {
+    if (!wb.editNodeId) return;
+    const onResize = () => positionEditor();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [wb.editNodeId, positionEditor]);
+
+  useEffect(() => {
+    if (!wb.editNodeId) return;
+    const onPointer = (ev: PointerEvent) => {
+      const t = ev.target as Node;
+      if (editorRef.current?.contains(t)) return;
+      const active = document.activeElement;
+      if (
+        active &&
+        editorRef.current?.contains(active) &&
+        active.tagName === 'SELECT'
+      ) {
+        return;
+      }
+      wb.setEditNodeId(null);
+    };
+    document.addEventListener('pointerdown', onPointer, true);
+    return () => document.removeEventListener('pointerdown', onPointer, true);
+  }, [wb.editNodeId, wb.setEditNodeId]);
 
   // Drop the rubber-band line as soon as the link is confirmed, cancelled, or
   // the type menu takes over; otherwise it stays frozen on the last cursor spot.
@@ -209,24 +256,27 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
       const [wx, wy] = toWorld(ev.clientX, ev.clientY);
       const dx = wx - d.sx;
       const dy = wy - d.sy;
-      wb.moveNodesByGid(d.gid, dx, dy, d.base);
-      const gg = wb.snapHousehold(d.gid);
-      if (gg) setGuides(gg);
+      const snapped = wb.snapHouseholdDrag(d.gid, dx, dy);
+      wb.moveNodesByGid(
+        d.gid,
+        snapped?.dx ?? dx,
+        snapped?.dy ?? dy,
+        d.base,
+      );
+      setGuides(snapped?.guides ?? null);
       return;
     }
     if (dragRef.current) {
       const d = dragRef.current;
       const [wx, wy] = toWorld(ev.clientX, ev.clientY);
       wb.setFastRoute(true);
-      wb.updateNode(d.n.id, {
-        x: wx - d.dx,
-        y: wy - d.dy,
-      });
+      const rawX = wx - d.dx;
+      const rawY = wy - d.dy;
+      const snapped = wb.snapDragPosition(d.n, rawX, rawY, d.sticky);
+      d.sticky = snapped.sticky;
+      wb.updateNode(d.n.id, { x: snapped.x, y: snapped.y });
+      setGuides(wb.snap ? snapped.guides : null);
       movedRef.current = true;
-      const updated = wb.byid[d.n.id];
-      if (updated) {
-        setGuides(wb.guidesFor(updated));
-      }
       return;
     }
     if (panRef.current) {
@@ -282,7 +332,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
       return;
     }
     const [wx, wy] = toWorld(ev.clientX, ev.clientY);
-    dragRef.current = { n, dx: wx - n.x, dy: wy - n.y };
+    dragRef.current = { n, dx: wx - n.x, dy: wy - n.y, sticky: { x: null, y: null } };
     movedRef.current = false;
     (ev.currentTarget as Element).setPointerCapture(ev.pointerId);
   };
@@ -314,7 +364,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
       >
         <defs>
           <clipPath id="tagclip">
-            <rect x={0} y={0} width={200} height={52} rx={11} />
+            <rect x={0} y={0} width={200} height={CARD_H} rx={11} />
           </clipPath>
         </defs>
         <g
@@ -327,7 +377,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
             groups={wb.groups}
             worlds={wb.worlds}
             show={wb.show.worlds}
-            packVis={wb.packVis}
+            packVis={wb.nodeVis}
             onWorldDragStart={(world, sx, sy, base) => {
               worldDragRef.current = { world, sx, sy, base };
             }}
@@ -336,7 +386,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
             groups={wb.groups}
             nodes={wb.nodes}
             show={wb.show.groups}
-            packVis={wb.packVis}
+            packVis={wb.nodeVis}
             onHouseholdDragStart={(gid, sx, sy, base) => {
               hhDragRef.current = { gid, sx, sy, base };
             }}
@@ -424,6 +474,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
           bName={wb.byid[menu.b]?.first ?? ''}
           left={menu.x}
           top={menu.y}
+          hideSibling={siblingsShareParents(menu.a, menu.b, wb.edges)}
           onConfirm={(type) => {
             if (type === 'parent')
               wb.confirmConnect('parent');
@@ -435,7 +486,19 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
           }}
         />
       )}
-      <Legend worlds={wb.worlds} />
+      <Legend
+        ref={legendRef}
+        worlds={wb.worlds}
+        liveWorlds={wb.liveWorlds}
+        onPickWorld={(world) => {
+          const r = svgRef.current?.getBoundingClientRect();
+          const lg = legendRef.current?.getBoundingClientRect();
+          // Measured rather than assumed, so the reserved gutter tracks the
+          // legend's real width and offset at any viewport size.
+          const inset = r && lg ? Math.max(r.right - lg.left, 0) : 0;
+          wb.zoomToWorld(world, r?.width ?? 800, r?.height ?? 600, inset);
+        }}
+      />
       <Hint />
       <ViewControls wb={wb} svgRef={svgRef} />
       {editNode && (
@@ -446,6 +509,8 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
           nodes={wb.nodes}
           left={editorPos.left}
           top={editorPos.top}
+          editorRef={editorRef}
+          onLayout={positionEditor}
           onSave={(patch) => {
             wb.updateNode(editNode.id, patch);
             wb.setEditNodeId(null);
