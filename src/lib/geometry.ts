@@ -2,6 +2,7 @@ import {
   ALIGN_TH,
   BAND,
   GRID,
+  PILL_HALF_W,
   RGAP,
   STUB,
   UNION_MIN_GAP,
@@ -223,29 +224,51 @@ export function unionGeom(a: SimNode, b: SimNode): UnionGeom {
   if (gap >= UNION_MIN_GAP) {
     // The tags face each other with room to spare, so the pill drops straight
     // into the gap: out of L's right edge, into the pill's left edge, out of
-    // the pill's right edge, into R's left edge.
-    const S = Math.max(14, Math.min(26, gap / 2 - 14));
+    // the pill's right edge, into R's left edge. Every x stays inside the gap,
+    // so the run at ry never reaches either tag. The gap floor guarantees the
+    // jogs land clear of the pill rather than cutting across it.
+    const S = Math.min(STUB, gap / 2);
     const lx = rx - S;
     const rxx = rx + S;
     const pts = `${sx},${sy} ${lx},${sy} ${lx},${ry} ${rx},${ry} ${rxx},${ry} ${rxx},${ey} ${ex},${ey}`;
     return { sx, sy, ex, ey, rx, ry, pts };
   }
 
-  // The tags overlap horizontally (typically stacked), so there is no gap to
-  // sit in. Wrap around the outside instead: the upper tag leaves its right
-  // edge and enters the pill's right edge, and the pill's left edge runs out
-  // and back into the lower tag's left edge. Both vertical jogs stay outside
-  // every tag, so nothing is ever entered from the top or bottom.
-  const T = sy <= ey ? L : R;
-  const B = sy <= ey ? R : L;
-  const tx = T.x + T.w;
-  const ty = T.y + T.h / 2;
-  const bx = B.x;
-  const by = B.y + B.h / 2;
-  const outR = Math.max(L.x + L.w, R.x + R.w) + STUB;
-  const outL = Math.min(L.x, R.x) - STUB;
-  const pts = `${tx},${ty} ${outR},${ty} ${outR},${ry} ${rx},${ry} ${outL},${ry} ${outL},${by} ${bx},${by}`;
-  return { sx: tx, sy: ty, ex: bx, ey: by, rx, ry, pts };
+  // Too tight for the pill to sit between the facing edges, so it has to be
+  // reached from further out. Where it goes depends on whether anything can
+  // pass between the tags at all.
+  if (Math.min(L.y + L.h, R.y + R.h) < Math.max(L.y, R.y)) {
+    // The tags are vertically apart, so the corridor between them is clear and
+    // the pill stays on it at the midpoint. Overshoot just past the pill and
+    // come back in, keeping the whole detour local to the pill instead of
+    // spanning both tags. With a real (if narrow) gap the left tag is the one
+    // that stems out to the right; when the tags overlap horizontally "left" is
+    // meaningless, so the upper tag takes that role.
+    const first = gap < 0 && sy > ey ? R : L;
+    const second = first === L ? R : L;
+    const fx = first.x + first.w;
+    const fy = first.y + first.h / 2;
+    const gx = second.x;
+    const gy = second.y + second.h / 2;
+    const jogR = Math.max(fx, rx + PILL_HALF_W) + STUB;
+    const jogL = Math.min(gx, rx - PILL_HALF_W) - STUB;
+    const pts = `${fx},${fy} ${jogR},${fy} ${jogR},${ry} ${rx},${ry} ${jogL},${ry} ${jogL},${gy} ${gx},${gy}`;
+    return { sx: fx, sy: fy, ex: gx, ey: gy, rx, ry, pts };
+  }
+
+  // The tags overlap on both axes, so nothing fits between them. Bridge over
+  // the top or under the bottom, whichever is nearer, and leave through the
+  // outward-facing side of each tag: heading inward would only run into the
+  // other tag.
+  const bx = L.x;
+  const bex = Math.max(L.x + L.w, R.x + R.w);
+  const outL = bx - STUB;
+  const outR = bex + STUB;
+  const above = Math.min(L.y, R.y) - RGAP;
+  const below = Math.max(L.y + L.h, R.y + R.h) + RGAP;
+  const py = ry - above <= below - ry ? above : below;
+  const pts = `${bx},${sy} ${outL},${sy} ${outL},${py} ${rx},${py} ${outR},${py} ${outR},${ey} ${bex},${ey}`;
+  return { sx: bx, sy, ex: bex, ey, rx, ry: py, pts };
 }
 
 export function bbox(
