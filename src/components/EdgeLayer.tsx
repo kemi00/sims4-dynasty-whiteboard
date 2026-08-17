@@ -2,29 +2,88 @@ import { COL, UEDIT } from '../lib/constants.ts';
 import { ptsStr } from '../lib/utils.ts';
 import type { BloodPath, BloodVert, UnionRender } from '../types/whiteboard.ts';
 
+const PILL_H = 24;
+
+/** Opaque capsule that masks the connector where the relationship glyph sits. */
+function PillBg({
+  x,
+  y,
+  w,
+  color,
+}: {
+  x: number;
+  y: number;
+  w: number;
+  color: string;
+}) {
+  return (
+    <rect
+      x={x - w / 2}
+      y={y - PILL_H / 2}
+      width={w}
+      height={PILL_H}
+      rx={PILL_H / 2}
+      fill="#fff"
+      stroke={`${color}44`}
+      strokeWidth={1}
+    />
+  );
+}
+
 function RingPill({ x, y, color }: { x: number; y: number; color: string }) {
   return (
     <>
+      <PillBg x={x} y={y} w={36} color={color} />
       <circle cx={x - 5.5} cy={y} r={6.6} fill="none" stroke={color} strokeWidth={2.3} />
       <circle cx={x + 5.5} cy={y} r={6.6} fill="none" stroke={color} strokeWidth={2.3} />
     </>
   );
 }
 
+// Material "favorite" glyph, authored in a 24×24 box centred on (12, 12.2).
+const HEART_D =
+  'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z';
+
 function HeartPill({ x, y, color }: { x: number; y: number; color: string }) {
-  const sc = 0.9;
-  const cx0 = 12;
-  const cy0 = 12.2;
-  const d = `M${x},${y} m${-cx0 * sc},${-cy0 * sc} c0,-3.5 2.8,-6.3 6.3,-6.3 2.1,0 3.9,1 5.1,2.6 1.2,-1.6 3,-2.6 5.1,-2.6 3.5,0 6.3,2.8 6.3,6.3 0,7.5 -11.4,13.4 -11.4,13.4 s-11.4,-5.9 -11.4,-13.4 z`;
-  return <path d={d} fill={color} />;
+  return (
+    <>
+      <PillBg x={x} y={y} w={36} color={color} />
+      <path
+        d={HEART_D}
+        fill={color}
+        stroke="none"
+        transform={`translate(${x} ${y}) scale(0.9) translate(-12 -12.2)`}
+      />
+    </>
+  );
 }
 
 function DivorcePill({ x, y, color }: { x: number; y: number; color: string }) {
   return (
     <>
-      <RingPill x={x} y={y} color={color} />
-      <line x1={x - 9} y1={y - 9} x2={x + 9} y2={y + 9} stroke={color} strokeWidth={2} />
-      <line x1={x + 9} y1={y - 9} x2={x - 9} y2={y + 9} stroke={color} strokeWidth={2} />
+      <PillBg x={x} y={y} w={38} color={color} />
+      <circle cx={x - 6.5} cy={y} r={6.3} fill="none" stroke={color} strokeWidth={2.2} />
+      <circle cx={x + 6.5} cy={y} r={6.3} fill="none" stroke={color} strokeWidth={2.2} />
+      {[-2.5, 1.5].map((o) => (
+        <g key={o}>
+          <line
+            x1={x + o - 3}
+            y1={y + 8}
+            x2={x + o + 3}
+            y2={y - 8}
+            stroke="#fff"
+            strokeWidth={3.4}
+          />
+          <line
+            x1={x + o - 3}
+            y1={y + 8}
+            x2={x + o + 3}
+            y2={y - 8}
+            stroke={color}
+            strokeWidth={1.9}
+          />
+        </g>
+      ))}
     </>
   );
 }

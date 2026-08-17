@@ -94,6 +94,12 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     positionEditor();
   }, [positionEditor, wb.viewport, wb.editNodeId]);
 
+  // Drop the rubber-band line as soon as the link is confirmed, cancelled, or
+  // the type menu takes over; otherwise it stays frozen on the last cursor spot.
+  useEffect(() => {
+    if (!wb.connSrc || wb.connectMenu) setTempLine(null);
+  }, [wb.connSrc, wb.connectMenu]);
+
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
