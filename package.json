@@ -2,6 +2,7 @@
   "name": "sims4-dynasty-whiteboard",
   "private": true,
   "version": "0.0.0",
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.16.1",
   "engines": {

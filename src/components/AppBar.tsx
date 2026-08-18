@@ -50,7 +50,7 @@ export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef, playBtnRef }: Prop
           <path d="M4 11 L10 15 L10 30 Z" fill="#3fa61f" />
           <path d="M16 11 L10 15 L10 30 Z" fill="#57c22e" />
         </svg>
-        <span className="brand__name">Dynasty Whiteboard</span>
+        <span className="brand__name">Family Trees Whiteboard</span>
       </span>
 
       <span className="appbar__rule" aria-hidden="true" />

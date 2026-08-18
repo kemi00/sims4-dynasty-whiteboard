@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# SkyChips2Go source spreadsheet — download locally; see data/README.md
+data/premade-sims.xlsx
+data/*.xlsx

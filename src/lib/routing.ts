@@ -256,7 +256,6 @@ function drawPedigreeFork(
   ctx: RoutingContext,
   blood: BloodPath[],
   parentBusKids: Set<string>,
-  byid: Record<string, SimNode>,
 ): void {
   if (!belowK.length) return;
   const laneTop = Math.min(...belowK.map((n) => n.y - STUB));
@@ -632,7 +631,6 @@ export function computeEdgeRenderData(
         ctx,
         BLOOD,
         parentBusKids,
-        byid,
       );
     }
     crossHHBelow.forEach((n) => {

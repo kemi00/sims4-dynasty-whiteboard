@@ -492,7 +492,7 @@ export function useWhiteboard() {
     );
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `sims4_dynasties_${fileStamp()}.json`;
+    a.download = `sims4_family_trees_${fileStamp()}.json`;
     a.click();
   }, [nodesCore, edges, groups, hiddenPacks, hiddenPlay]);
 
@@ -559,7 +559,7 @@ export function useWhiteboard() {
           if (!b) return;
           const a = document.createElement('a');
           a.href = URL.createObjectURL(b);
-          a.download = `sims4_dynasties_${fileStamp()}.png`;
+          a.download = `sims4_family_trees_${fileStamp()}.png`;
           a.click();
         });
       };

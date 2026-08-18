@@ -5,7 +5,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { border, unionGeom } from '../lib/geometry.ts';
+import { border, unionGeom, type SnapSticky } from '../lib/geometry.ts';
 import { CARD_H } from '../lib/constants.ts';
 import { isUserE, siblingsShareParents } from '../lib/utils.ts';
 import type { WhiteboardApi } from '../hooks/useWhiteboard.ts';

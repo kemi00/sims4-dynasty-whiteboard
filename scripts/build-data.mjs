@@ -1,5 +1,8 @@
 /**
- * Rebuilds src/data/whiteboard.json from data/premade-sims.xlsx.
+ * Rebuilds src/data/whiteboard.json from u/SkyChips2Go's premade-sims spreadsheet.
+ *
+ * The source .xlsx is not in git. Download it to data/premade-sims.xlsx first;
+ * see data/README.md.
  *
  * The merge is deliberately additive. Card coordinates and the relationship
  * edges between them were authored by hand and exist nowhere in the
@@ -12,7 +15,7 @@
  *            without writing the file.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -117,6 +120,12 @@ const norm = (s) => String(s).replace(/\s+/g, ' ').trim().toLowerCase();
 const keyOf = (first, sur) => `${norm(first)}|${norm(cleanSur(sur))}`;
 
 /* ------------------------------------------------------------------- inputs */
+
+if (!existsSync(XLSX)) {
+  console.error(`Missing spreadsheet: ${XLSX}`);
+  console.error('Download from SkyChips2Go and save as data/premade-sims.xlsx — see data/README.md');
+  process.exit(1);
+}
 
 const sheets = readWorkbook(XLSX);
 const simRows = table(sheets['List of Sims'], [

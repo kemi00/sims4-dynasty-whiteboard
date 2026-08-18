@@ -1072,7 +1072,6 @@ function packTilesInColumns(
 
 function assignTilesToColumns(
   tiles: HHTile[],
-  cols: number,
   colStart: number,
   colCount: number,
   colHeights: number[],
@@ -1121,12 +1120,11 @@ function placeHouseholdBento(
   const assignments: { tile: HHTile; col: number }[] = [];
 
   if (!clusterTiles.length) {
-    assignTilesToColumns(singleTiles, cols, 0, cols, colHeights, colWidths, assignments);
+    assignTilesToColumns(singleTiles, 0, cols, colHeights, colWidths, assignments);
   } else {
     const singleCols = Math.min(cols - 1, singleTiles.length > 4 ? 2 : 1);
     assignTilesToColumns(
       singleTiles,
-      cols,
       0,
       singleCols,
       colHeights,
@@ -1135,7 +1133,6 @@ function placeHouseholdBento(
     );
     assignTilesToColumns(
       clusterTiles,
-      cols,
       singleCols,
       cols - singleCols,
       colHeights,
