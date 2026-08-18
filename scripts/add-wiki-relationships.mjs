@@ -142,7 +142,62 @@ addEdge('Pablo Martínez', 'Sofía Martínez', 'parent');
 addEdge('Jennifer Martínez', 'Leonardo Martínez', 'parent');
 addEdge('Jennifer Martínez', 'Sofía Martínez', 'parent');
 
-// Landry — add parent edges when known; never add sibling edges if parents are linked.
+// Landry — Family Fortune. Nyssa is grandmother of Eddie, Ava, and Lila
+// (siblings). Wiki family tree inserts an unnamed middle generation.
+addSim({
+  id: 'Unknown Landry',
+  gid: 'Other||Landry',
+  first: 'Unknown',
+  sur: 'Landry',
+  age: 'Adult',
+  state: 'Sim',
+  gender: '',
+  hh: 'Landry',
+  ...townie,
+  ohh: 'Landry',
+  oplay: 'Townie',
+});
+addEdge('Nyssa Landry', 'Unknown Landry', 'parent');
+addEdge('Unknown Landry', 'Eddie Landry', 'parent');
+addEdge('Unknown Landry', 'Ava Landry', 'parent');
+addEdge('Unknown Landry', 'Lila Landry', 'parent');
+
+// Bailey — For Rent tenants; married couple (wiki: Newlyweds).
+addEdge('Tia Bailey', 'Haru Matsuda', 'marriage');
+
+// Brock — For Rent; single mother Nancy and her two children.
+addEdge('Nancy Brock', 'Julie Brock', 'parent');
+addEdge('Nancy Brock', 'Johnny Brock', 'parent');
+
+// Cragg — For Rent retirees; married couple. Wiki: Jesse is male.
+const jesse = byId.get('Jesse Cragg');
+if (jesse) jesse.gender = 'Male';
+addEdge('Jesse Cragg', 'Meekah Cragg', 'marriage');
+
+// Gonzales — CAS defaults; twins / siblings (wiki: Gonzalez).
+addEdge('Gabby Gonzales', 'Gael Gonzales', 'sibling');
+
+// Lee — For Rent generational: Sunja → Minsung → Daesung & Yuri.
+addEdge('Sunja Lee', 'Minsung Lee', 'parent');
+addEdge('Minsung Lee', 'Daesung Lee', 'parent');
+addEdge('Minsung Lee', 'Yuri Lee', 'parent');
+
+// Purdue — Gallery siblings. Ollie married Babs (wiki bios / Stories trailer).
+// Sophia Jordan is a past fling, not a current partner — do not add romance.
+addEdge('Cassidy Purdue', 'Ollie Purdue', 'sibling');
+addEdge('Ollie Purdue', "Babs L'Amour", 'marriage');
+
+// Sage — For Rent; married parents of Xavier and Zehava.
+addEdge('Owen Sage', 'Jilliana Sage', 'marriage');
+addEdge('Owen Sage', 'Xavier Sage', 'parent');
+addEdge('Owen Sage', 'Zehava Sage', 'parent');
+addEdge('Jilliana Sage', 'Xavier Sage', 'parent');
+addEdge('Jilliana Sage', 'Zehava Sage', 'parent');
+
+// Lu — Kitty Lu + three cats. Wiki: pets / acquaintances, no family edges.
+// Shadows — Luna + Gretchen, best friends / roommates. No family edges.
+// Zaki — four young-adult roommates, acquaintances. No family edges.
+// Malpractice — gallery roommates (doctors). Chuck's Gladys romance is Morse.
 
 function pruneImpliedSiblingEdges(edges) {
   const parentsOf = {};
