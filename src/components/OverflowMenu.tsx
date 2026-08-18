@@ -1,14 +1,16 @@
 import {
   DotsThreeVertical,
   DownloadSimple,
+  EnvelopeSimple,
   FileImage,
   Info,
   UploadSimple,
 } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '../lib/credits.ts';
+import { useDropdownPosition } from '../hooks/useDropdownPosition.ts';
 import { CreditsPanel } from './CreditsPanel.tsx';
 import { ToolButton } from './ToolButton.tsx';
-import { useDropdownPosition } from '../hooks/useDropdownPosition.ts';
 
 type Props = {
   onSave: () => void;
@@ -61,7 +63,7 @@ export function OverflowMenu({ onSave, onLoad, onExportPng }: Props) {
     <div className="overflow" ref={wrapRef}>
       <ToolButton
         icon={DotsThreeVertical}
-        label="File actions"
+        label="Save, load, export, contact, and credits"
         expanded={open}
         onClick={() => setOpen((o) => !o)}
       />
@@ -70,7 +72,7 @@ export function OverflowMenu({ onSave, onLoad, onExportPng }: Props) {
           ref={popRef}
           className="pop"
           role="menu"
-          aria-label="File actions"
+          aria-label="More actions"
           style={popStyle}
         >
           <button
@@ -98,6 +100,18 @@ export function OverflowMenu({ onSave, onLoad, onExportPng }: Props) {
             <FileImage aria-hidden="true" />
             Export PNG
           </button>
+          <a
+            href={CONTACT_MAILTO}
+            role="menuitem"
+            title={`Problems, feedback, suggestions, or ideas: ${CONTACT_EMAIL}`}
+            onClick={() => setOpen(false)}
+          >
+            <EnvelopeSimple aria-hidden="true" />
+            <span className="pop__stack">
+              Contact
+              <span className="pop__sub">{CONTACT_EMAIL}</span>
+            </span>
+          </a>
           <button
             type="button"
             role="menuitem"

@@ -16,3 +16,10 @@ export const SITE_URL = 'https://sims4-family-trees.vercel.app';
 
 export const EA_FAN_CONTENT_URL =
   'https://help.ea.com/en/help/faq/fan-content-guidelines/';
+
+/** Inbox for problems, feedback, suggestions, or ideas. */
+export const CONTACT_EMAIL = 'giggle.34richter@icloud.com';
+
+export const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
+  'Family Trees Whiteboard',
+)}`;

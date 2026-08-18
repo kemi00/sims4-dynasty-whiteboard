@@ -88,11 +88,14 @@ html,body,#root{margin:0;height:100%;height:100dvh;font-family:-apple-system,Bli
 /* ── overflow menu ───────────────────────────────────────────────────────── */
 .overflow{position:relative;flex:0 0 auto}
 .pop{position:fixed;min-width:186px;padding:6px;background:#fff;border:1px solid var(--line);border-radius:var(--r-surface);box-shadow:var(--lift);z-index:30}
-.pop button{display:flex;align-items:center;gap:10px;width:100%;height:33px;padding:0 9px;border:none;border-radius:var(--r-control);background:transparent;color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;text-align:left;cursor:pointer}
-.pop button svg{width:16px;height:16px;color:var(--ink-3);flex:0 0 auto}
-.pop button:hover{background:var(--hover)}
-.pop button:hover svg{color:var(--ink-2)}
-.pop button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-ring)}
+.pop button,.pop a{display:flex;align-items:center;gap:10px;width:100%;min-height:33px;padding:0 9px;border:none;border-radius:var(--r-control);background:transparent;color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;text-align:left;cursor:pointer;text-decoration:none;box-sizing:border-box}
+.pop a{height:auto;padding-top:7px;padding-bottom:7px}
+.pop button svg,.pop a svg{width:16px;height:16px;color:var(--ink-3);flex:0 0 auto}
+.pop button:hover,.pop a:hover{background:var(--hover)}
+.pop button:hover svg,.pop a:hover svg{color:var(--ink-2)}
+.pop button:focus-visible,.pop a:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-ring)}
+.pop__stack{display:flex;flex-direction:column;gap:1px;min-width:0;line-height:1.25}
+.pop__sub{font-size:10.5px;font-weight:600;color:var(--ink-3);word-break:break-all}
 
 .credits-panel{font-size:11.5px;line-height:1.45}
 .credits-panel .gph button{width:24px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:50%;background:transparent;color:var(--ink-3);cursor:pointer}
@@ -203,7 +206,7 @@ svg{width:100%;height:100%;display:block;touch-action:none}
  .tool{height:44px}
  .tool--icon{width:44px;height:44px}
  .appbar{min-height:calc(var(--bar-h) + env(safe-area-inset-top,0px));height:auto}
- .menu button,.gpanel .grow,.agechips button,.pop button{min-height:44px}
+ .menu button,.gpanel .grow,.agechips button,.pop button,.pop a{min-height:44px}
 }
 
 /* Keep in sync with CHROME_COMPACT_MAX_PX in src/lib/constants.ts */
