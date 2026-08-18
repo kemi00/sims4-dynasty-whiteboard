@@ -1,3 +1,4 @@
+import { Analytics } from '@vercel/analytics/react';
 import { IconContext } from '@phosphor-icons/react';
 import { useEffect, useRef } from 'react';
 import './App.css';
@@ -138,6 +139,7 @@ export default function App() {
           </div>
         )}
       </div>
+      <Analytics />
     </IconContext.Provider>
   );
 }
