@@ -286,9 +286,10 @@ function layoutGenerationRow(
   originX: number,
   originY: number,
   genIndex: number,
+  clusterCtx?: ClusterRowCtx,
 ): { placed: PlacedCard[]; w: number } {
   if (genIndex === 0) {
-    return layoutCardsRow(rowMem, g, hhIds, originX, originY);
+    return layoutCardsRow(rowMem, g, hhIds, originX, originY, clusterCtx);
   }
 
   const keys = rowMem.map((n) => sharedParentKey(n, g, hhIds));
@@ -310,7 +311,7 @@ function layoutGenerationRow(
     return { placed, w: maxX - originX + LAYOUT.hhPad };
   }
 
-  const row = layoutCardsRow(rowMem, g, hhIds, originX, originY);
+  const row = layoutCardsRow(rowMem, g, hhIds, originX, originY, clusterCtx);
   return centerRowUnderParents(row, rowMem, g, placedById, hhIds, originX);
 }
 
@@ -424,6 +425,43 @@ function attachSiblingsToPartnerUnits(
   return out;
 }
 
+type ClusterRowCtx = {
+  colIndex: number;
+  orderedGids: string[];
+  idToGid: Map<string, string>;
+};
+
+/** Sort row units so cross-household partners face each other — no card blocks the line. */
+function sortUnitsByConnectionBias(
+  units: string[][],
+  g: HHGraph,
+  ctx: ClusterRowCtx,
+): string[][] {
+  const bias = (unit: string[]) => {
+    let sum = 0;
+    let n = 0;
+    for (const id of unit) {
+      const p = g.partner.get(id);
+      if (!p) continue;
+      const partnerGid = ctx.idToGid.get(p);
+      const myGid = ctx.idToGid.get(id);
+      if (!partnerGid || partnerGid === myGid) continue;
+      const partnerCol = ctx.orderedGids.indexOf(partnerGid);
+      if (partnerCol < 0) continue;
+      n++;
+      if (partnerCol < ctx.colIndex) sum += 0;
+      else if (partnerCol > ctx.colIndex) sum += 1;
+    }
+    if (!n) return 0.5;
+    return sum / n;
+  };
+  return [...units].sort((a, b) => {
+    const d = bias(a) - bias(b);
+    if (Math.abs(d) > 0.01) return d;
+    return a[0]!.localeCompare(b[0]!);
+  });
+}
+
 /** Place one generation band — cards only, no household title (drawn once by GroupLayer). */
 function layoutCardsRow(
   rowMembers: SimNode[],
@@ -431,6 +469,7 @@ function layoutCardsRow(
   hhIds: Set<string>,
   originX: number,
   originY: number,
+  clusterCtx?: ClusterRowCtx,
 ): { placed: PlacedCard[]; w: number } {
   const ids = new Set(rowMembers.map((n) => n.id));
   const placed = new Set<string>();
@@ -472,14 +511,16 @@ function layoutCardsRow(
   }
 
   const merged = attachSiblingsToPartnerUnits(units, g, hhIds);
-  merged.sort((a, b) => a[0]!.localeCompare(b[0]!));
+  const ordered = clusterCtx
+    ? sortUnitsByConnectionBias(merged, g, clusterCtx)
+    : [...merged].sort((a, b) => a[0]!.localeCompare(b[0]!));
 
   const byId = new Map(rowMembers.map((n) => [n.id, n]));
   let x = originX;
   const placedCards: PlacedCard[] = [];
 
-  for (let u = 0; u < merged.length; u++) {
-    const unit = merged[u]!;
+  for (let u = 0; u < ordered.length; u++) {
+    const unit = ordered[u]!;
     if (u > 0) x += LAYOUT.gapX;
     for (let i = 0; i < unit.length; i++) {
       const id = unit[i]!;
@@ -675,7 +716,7 @@ function pinRowToColumn(
   return placed.map((p) => ({ ...p, x: Math.round(p.x + dx) }));
 }
 
-/** Keep a generation row inside its allocated tag-column band. */
+/** Parent edges missing — stack by life-stage tier instead of one flat row. */
 function ageTierGenerations(mem: SimNode[]): Map<string, number> {
   const tiers = [...new Set(mem.map((n) => ageRank(n.age)))].sort(
     (a, b) => b - a,
@@ -936,6 +977,8 @@ function layoutClusterTile(
 
   const placed: PlacedCard[] = [];
   const placedById = new Map<string, PlacedCard>();
+  const orderedGids = ordered.map(([gid]) => gid);
+  const idToGid = new Map(allMem.map((n) => [n.id, n.gid]));
   /** Fixed X band per linked household — columns stay aligned across generation rows. */
   const colStart = new Map<string, number>();
   const colSpan = new Map<string, number>();
@@ -950,7 +993,8 @@ function layoutClusterTile(
   let cardY = LAYOUT.hhHeader + LAYOUT.hhPad + minGen * pitchY;
 
   for (let gi = minGen; gi <= maxGen; gi++) {
-    for (const [gid, hhMem] of ordered) {
+    for (let colIndex = 0; colIndex < ordered.length; colIndex++) {
+      const [gid, hhMem] = ordered[colIndex]!;
       const hhIds = new Set(hhMem.map((n) => n.id));
       const rowMem = hhMem.filter((n) => (gen.get(n.id) ?? 0) === gi);
       if (!rowMem.length) continue;
@@ -964,6 +1008,7 @@ function layoutClusterTile(
         rowX,
         cardY,
         gi,
+        { colIndex, orderedGids, idToGid },
       );
       const pinned = pinRowToColumn(row.placed, rowX, span);
       for (const p of pinned) placedById.set(p.id, p);
