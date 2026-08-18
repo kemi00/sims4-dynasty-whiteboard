@@ -10,7 +10,9 @@ export const ROSTER_CREDIT = {
 
 export const SIMS_WIKI_URL = 'https://sims.fandom.com/wiki/The_Sims_4';
 
-export const REPO_URL = 'https://github.com/kemi00/sims4-dynasty-whiteboard';
+export const REPO_URL = 'https://github.com/kemi00/sims4-family-trees-whiteboard';
+
+export const SITE_URL = 'https://sims4-family-trees.vercel.app';
 
 export const EA_FAN_CONTENT_URL =
   'https://help.ea.com/en/help/faq/fan-content-guidelines/';

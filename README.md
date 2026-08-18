@@ -31,7 +31,7 @@ pnpm preview
 
 ## Deploy
 
-Production site: *(Vercel URL added after deploy)*
+Production site: [https://sims4-family-trees.vercel.app](https://sims4-family-trees.vercel.app)
 
 ## Stack
 
@@ -90,4 +90,4 @@ Links between sims were sourced from in-game relationships (packs I own) and [Th
 
 ### This project
 
-Board layout and whiteboard features are original to [this repository](https://github.com/kemi00/sims4-dynasty-whiteboard).
+Board layout and whiteboard features are original to [this repository](https://github.com/kemi00/sims4-family-trees-whiteboard).

@@ -4,6 +4,7 @@ import {
   REPO_URL,
   ROSTER_CREDIT,
   SIMS_WIKI_URL,
+  SITE_URL,
 } from '../lib/credits.ts';
 
 type Props = {
@@ -44,6 +45,11 @@ export function CreditsPanel({ anchorRect, onClose }: Props) {
         on r/Sims4.
       </p>
       <ul className="credits-panel__links">
+        <li>
+          <a href={SITE_URL} target="_blank" rel="noreferrer">
+            Live site
+          </a>
+        </li>
         <li>
           <a href={REPO_URL} target="_blank" rel="noreferrer">
             GitHub repo
