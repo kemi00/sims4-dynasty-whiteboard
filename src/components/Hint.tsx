@@ -53,14 +53,16 @@ export function Hint() {
         <X />
       </button>
       <b>How to use</b>
-      <br />• <b>Drag</b> a tag to move it. Drag empty space to pan.
-      <br />• <b>Connect</b>, then click two sims to link them (Marriage /
+      <br />• <b>Drag</b> a tag to move it. Drag empty space to pan. Pinch
+      to zoom.
+      <br />• <b>Connect</b>, then tap two sims to link them (Marriage /
       Romance / Divorced / Parent→Child / Sibling). Links <b>you</b> add show
-      in <b style={{ color: '#7c3aed' }}>violet</b>.
-      <br />• Click a <b>⚭ / ❤</b> connection, then a sim, to make that sim
+      in <b style={{ color: '#7c3aed' }}>violet</b>. Two-finger drag pans
+      while Connect is on.
+      <br />• Tap a <b>⚭ / ❤</b> connection, then a sim, to make that sim
       the <b>child of both partners</b>.
-      <br />• Click a tag or line, press <b>Delete</b> to remove.
-      <br />• Double-click a tag to edit name/age.
+      <br />• Tap a tag or line, then the <b>trash</b> button to remove it.
+      <br />• Double-tap or long-press a tag to edit name/age.
       <br />• <b>Save .json</b> keeps your work and <b>Load</b> brings it back,
       both under the <b>⋮</b> menu at the top right.
     </div>

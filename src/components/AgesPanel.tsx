@@ -1,47 +1,53 @@
 import { AGES_H, SPECIES, SPECIES_H } from '../lib/constants.ts';
-import { isPet } from '../lib/utils.ts';
-import type { SimNode } from '../types/whiteboard.ts';
+import { panelPosition } from '../lib/chrome.ts';
+import { useCompactChrome } from '../hooks/useCompactChrome.ts';
+import { isPet, partneredIdSet } from '../lib/utils.ts';
+import type { Edge, SimNode } from '../types/whiteboard.ts';
 
 type Props = {
   nodes: SimNode[];
+  edges: Edge[];
   hiAges: Set<string>;
+  hiSingle: boolean;
   packVis: (n: SimNode) => boolean;
   anchorRect: DOMRect | null;
   onToggle: (age: string) => void;
+  onToggleSingle: () => void;
   onClear: () => void;
 };
 
 export function AgesPanel({
   nodes,
+  edges,
   hiAges,
+  hiSingle,
   packVis,
   anchorRect,
   onToggle,
+  onToggleSingle,
   onClear,
 }: Props) {
-  if (!anchorRect) return null;
-  let L = anchorRect.left;
-  if (L + 266 > window.innerWidth) L = window.innerWidth - 266;
+  const compact = useCompactChrome();
+  const pos = panelPosition(anchorRect, 266);
+  if (!pos) return null;
 
   const sims = nodes.filter((n) => !isPet(n));
   const pets = nodes.filter(isPet);
+  const partnered = partneredIdSet(edges);
   const cntAge = (a: string) => sims.filter((n) => n.age === a).length;
   const cntSpecies = (s: string) =>
     pets.filter((n) => n.species === s).length;
+  const cntSingle = sims.filter((n) => !partnered.has(n.id)).length;
   const shown = nodes.filter(packVis).length;
 
   return (
     <div
       id="ages"
-      className="gpanel"
-      style={{
-        display: 'block',
-        left: Math.max(6, L),
-        top: anchorRect.bottom + 6,
-      }}
+      className={compact ? 'gpanel gpanel--sheet' : 'gpanel'}
+      style={{ display: 'block', ...pos }}
     >
       <div className="gph">
-        <b>Highlight age / life-stage / pets</b>
+        <b>Highlight age, pets, or single sims</b>
         <span>
           <button onClick={onClear}>Clear</button>
         </span>
@@ -62,6 +68,16 @@ export function AgesPanel({
         )}
       </div>
       <div className="agechips">
+        <button
+          type="button"
+          className={hiSingle ? 'on' : ''}
+          onClick={onToggleSingle}
+        >
+          Single{' '}
+          <b style={{ opacity: 0.6 }}>{cntSingle}</b>
+        </button>
+      </div>
+      <div className="agechips" style={{ marginTop: 8 }}>
         {AGES_H.map((a) => (
           <button
             key={a}
@@ -109,7 +125,8 @@ export function AgesPanel({
           margin: '8px 4px 2px',
         }}
       >
-        Highlighted sims glow gold; the rest dim. Pick several to compare.
+        Highlighted sims glow gold; the rest dim. Age chips combine with
+        each other; Single intersects whatever ages are picked.
       </div>
     </div>
   );

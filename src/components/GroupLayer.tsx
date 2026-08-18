@@ -1,3 +1,4 @@
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Group, SimNode } from '../types/whiteboard.ts';
 import { LAYOUT } from '../lib/layout.ts';
 
@@ -11,6 +12,7 @@ type Props = {
     wx: number,
     wy: number,
     base: Record<string, { ox: number; oy: number }>,
+    ev: ReactPointerEvent,
   ) => void;
 };
 
@@ -81,8 +83,7 @@ export function GroupLayer({
                 ) as { tx: number; ty: number; k: number };
                 const wx = (ev.clientX - r.left - tx) / k;
                 const wy = (ev.clientY - r.top - ty) / k;
-                onHouseholdDragStart(g0.gid, wx, wy, base);
-                (ev.currentTarget as Element).setPointerCapture(ev.pointerId);
+                onHouseholdDragStart(g0.gid, wx, wy, base, ev);
               }}
             >
               <rect

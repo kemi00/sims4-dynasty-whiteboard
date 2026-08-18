@@ -1,4 +1,5 @@
 import { X } from '@phosphor-icons/react';
+import { useCompactChrome } from '../hooks/useCompactChrome.ts';
 import {
   EA_FAN_CONTENT_URL,
   REPO_URL,
@@ -13,21 +14,25 @@ type Props = {
 };
 
 export function CreditsPanel({ anchorRect, onClose }: Props) {
-  if (!anchorRect) return null;
-  const w = 300;
-  let left = anchorRect.right - w;
-  if (left + w > window.innerWidth - 6) left = window.innerWidth - w - 6;
-  if (left < 6) left = 6;
+  const compact = useCompactChrome();
+  if (!compact && !anchorRect) return null;
+
+  const desktopPos = (() => {
+    if (compact || !anchorRect) return {};
+    const w = 300;
+    let left = anchorRect.right - w;
+    if (left + w > window.innerWidth - 6) left = window.innerWidth - w - 6;
+    if (left < 6) left = 6;
+    return { left, top: anchorRect.bottom + 6, width: w };
+  })();
 
   return (
     <div
       id="credits"
-      className="gpanel credits-panel"
+      className={compact ? 'gpanel credits-panel gpanel--sheet' : 'gpanel credits-panel'}
       style={{
         display: 'block',
-        left,
-        top: anchorRect.bottom + 6,
-        width: w,
+        ...desktopPos,
       }}
     >
       <div className="gph">

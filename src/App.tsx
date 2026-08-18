@@ -130,11 +130,17 @@ export default function App() {
           <div ref={agesPanelRef}>
             <AgesPanel
               nodes={wb.nodes}
+              edges={wb.edges}
               hiAges={wb.hiAges}
+              hiSingle={wb.hiSingle}
               packVis={wb.nodeVis}
               anchorRect={agesBtnRef.current?.getBoundingClientRect() ?? null}
               onToggle={wb.toggleAge}
-              onClear={() => wb.setHiAges(new Set())}
+              onToggleSingle={wb.toggleSingle}
+              onClear={() => {
+                wb.setHiAges(new Set());
+                wb.setHiSingle(false);
+              }}
             />
           </div>
         )}

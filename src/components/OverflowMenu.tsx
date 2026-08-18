@@ -8,6 +8,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { CreditsPanel } from './CreditsPanel.tsx';
 import { ToolButton } from './ToolButton.tsx';
+import { useDropdownPosition } from '../hooks/useDropdownPosition.ts';
 
 type Props = {
   onSave: () => void;
@@ -22,6 +23,7 @@ export function OverflowMenu({ onSave, onLoad, onExportPng }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const firstItemRef = useRef<HTMLButtonElement>(null);
+  const { popRef, style: popStyle } = useDropdownPosition(open, wrapRef);
 
   useEffect(() => {
     if (!open && !creditsOpen) return;
@@ -64,7 +66,13 @@ export function OverflowMenu({ onSave, onLoad, onExportPng }: Props) {
         onClick={() => setOpen((o) => !o)}
       />
       {open && (
-        <div className="pop" role="menu" aria-label="File actions">
+        <div
+          ref={popRef}
+          className="pop"
+          role="menu"
+          aria-label="File actions"
+          style={popStyle}
+        >
           <button
             ref={firstItemRef}
             type="button"

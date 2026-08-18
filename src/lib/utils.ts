@@ -148,9 +148,37 @@ export function isPet(n: SimNode): boolean {
   return !!n.species || n.state === 'Pet';
 }
 
-/** Age chips for sims; species chips for pets. */
-export function isHighlightMatch(n: SimNode, hi: Set<string>): boolean {
-  if (hi.size === 0) return true;
-  if (isPet(n)) return !!n.species && hi.has(n.species);
-  return hi.has(n.age);
+/** Current partners: marriage or romance. Divorced alone does not count. */
+export function partneredIdSet(edges: Edge[]): Set<string> {
+  const ids = new Set<string>();
+  for (const e of edges) {
+    if (e.type !== 'marriage' && e.type !== 'romance') continue;
+    ids.add(e.a);
+    ids.add(e.b);
+  }
+  return ids;
+}
+
+export function isUnpartnered(id: string, edges: Edge[]): boolean {
+  return !partneredIdSet(edges).has(id);
+}
+
+/**
+ * Age/species chips OR with each other; Single ANDs with that set.
+ * Pets ignore Single and only match species chips.
+ */
+export function isHighlightMatch(
+  n: SimNode,
+  hi: Set<string>,
+  hiSingle: boolean,
+  partnered: Set<string>,
+): boolean {
+  if (hi.size === 0 && !hiSingle) return true;
+  if (isPet(n)) {
+    if (hi.size === 0) return false;
+    return !!n.species && hi.has(n.species);
+  }
+  const ageOk = hi.size === 0 || hi.has(n.age);
+  const singleOk = !hiSingle || !partnered.has(n.id);
+  return ageOk && singleOk;
 }

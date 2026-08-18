@@ -1,15 +1,16 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import seedData from '../data/whiteboard.json';
-import { AGES_H, UEDIT } from '../lib/constants.ts';
+import { AGES_H, FOCUS_SIM_K, STATUS_FLASH_MS, UEDIT } from '../lib/constants.ts';
 import {
   bbox,
+  dominantWorldInViewport,
   snapHouseholdDelta,
   snapPosition,
   type SnapSticky,
 } from '../lib/geometry.ts';
-import { computeLayout, layoutBases } from '../lib/layout.ts';
+import { computeLayout, layoutBases, OTHER_WORLD } from '../lib/layout.ts';
 import { bloodVerts, computeEdgeRenderData, hopD } from '../lib/routing.ts';
-import { fileStamp, migrateWhiteboardData, sanitizeEdges, siblingsShareParents, worldColor } from '../lib/utils.ts';
+import { fileStamp, migrateWhiteboardData, partneredIdSet, sanitizeEdges, siblingsShareParents, worldColor } from '../lib/utils.ts';
 import type {
   ConnSrc,
   Edge,
@@ -23,6 +24,21 @@ import type {
 } from '../types/whiteboard.ts';
 
 const INITIAL_VIEW: Viewport = { tx: 40, ty: 40, k: 0.72 };
+
+const LAYER_STATUS: Record<keyof ShowToggles, { on: string; off: string }> = {
+  seed: {
+    on: 'Family links on — parent, sibling, and partner lines',
+    off: 'Family links off — cards stay, relationship lines hide',
+  },
+  groups: {
+    on: 'Household boxes on — dashed boxes around each house',
+    off: 'Household boxes off — house outlines hide',
+  },
+  worlds: {
+    on: 'World boxes on — coloured frames around each world',
+    off: 'World boxes off — world frames hide',
+  },
+};
 
 /** Strip derived geometry — only semantic fields and drag offsets are persisted. */
 function toCore(n: SimNode): SimNode {
@@ -55,6 +71,7 @@ export function useWhiteboard() {
   const [connSrc, setConnSrc] = useState<ConnSrc>(null);
   const [snap, setSnap] = useState(true);
   const [hiAges, setHiAges] = useState<Set<string>>(new Set());
+  const [hiSingle, setHiSingle] = useState(false);
   const [status, setStatus] = useState('');
   const [fastRoute, setFastRoute] = useState(false);
   const [editNodeId, setEditNodeId] = useState<string | null>(null);
@@ -68,6 +85,14 @@ export function useWhiteboard() {
     y: number;
   } | null>(null);
   const eidcRef = useRef(100000);
+  const statusFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectModeRef = useRef(connectMode);
+  connectModeRef.current = connectMode;
+  const pendingFocusRef = useRef<{
+    id: string;
+    svgWidth: number;
+    svgHeight: number;
+  } | null>(null);
 
   /** Positions and card sizes are derived on every render from layout rules. */
   const nodes = useMemo(
@@ -82,6 +107,27 @@ export function useWhiteboard() {
     });
     return m;
   }, [nodes]);
+
+  const frameSim = useCallback(
+    (n: SimNode, svgWidth: number, svgHeight: number) => {
+      const k = FOCUS_SIM_K;
+      setViewport({
+        k,
+        tx: svgWidth / 2 - (n.x + n.w / 2) * k,
+        ty: svgHeight / 2 - (n.y + n.h / 2) * k,
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const pending = pendingFocusRef.current;
+    if (!pending) return;
+    const n = byid[pending.id];
+    if (!n) return;
+    pendingFocusRef.current = null;
+    frameSim(n, pending.svgWidth, pending.svgHeight);
+  }, [byid, frameSim]);
 
   const packVis = useCallback(
     (n: SimNode) => !!n && !hiddenPacks.has(n.pack),
@@ -127,9 +173,30 @@ export function useWhiteboard() {
     [visibleNodes],
   );
 
-  const toggleShow = useCallback((key: keyof ShowToggles) => {
-    setShow((s) => ({ ...s, [key]: !s[key] }));
+  const partneredIds = useMemo(() => partneredIdSet(edges), [edges]);
+
+  const flashStatus = useCallback((msg: string) => {
+    if (statusFlashRef.current != null) clearTimeout(statusFlashRef.current);
+    setStatus(msg);
+    statusFlashRef.current = setTimeout(() => {
+      statusFlashRef.current = null;
+      setStatus((cur) => {
+        if (cur !== msg) return cur;
+        return connectModeRef.current
+          ? 'Connect: click the FIRST sim'
+          : '';
+      });
+    }, STATUS_FLASH_MS);
   }, []);
+
+  const toggleShow = useCallback(
+    (key: keyof ShowToggles) => {
+      const on = !show[key];
+      setShow((s) => ({ ...s, [key]: !s[key] }));
+      flashStatus(on ? LAYER_STATUS[key].on : LAYER_STATUS[key].off);
+    },
+    [show, flashStatus],
+  );
 
   const setConnectMode = useCallback(
     (on: boolean) => {
@@ -188,13 +255,25 @@ export function useWhiteboard() {
     setSel(null);
   }, [sel, editNodeId]);
 
-  const addSim = useCallback((_wx: number, _wy: number) => {
+  const addSim = useCallback((svgWidth: number, svgHeight: number) => {
     const id = 'new' + eidcRef.current++;
-    const world = 'Other';
+    const world =
+      dominantWorldInViewport(
+        nodes,
+        groups,
+        nodeVis,
+        viewport,
+        svgWidth,
+        svgHeight,
+      ) ?? OTHER_WORLD;
     const hh = '(added)';
+    const gid = `${world}||${hh}`;
+    const color = worldColor(world, worlds);
+    const neighbour =
+      nodes.find((n) => n.world === world && n.nb && n.nb !== '-')?.nb ?? '-';
     const n: SimNode = {
       id,
-      gid: `${world}||${hh}`,
+      gid,
       first: 'New',
       sur: 'Sim',
       age: 'Young Adult',
@@ -202,11 +281,11 @@ export function useWhiteboard() {
       gender: '-',
       hh,
       world,
-      nb: '-',
-      color: worldColor(world, worlds),
+      nb: neighbour,
+      color,
       townie: false,
       oworld: world,
-      onb: '-',
+      onb: neighbour,
       ohh: hh,
       oplay: 'Resident',
       pack: '',
@@ -218,9 +297,27 @@ export function useWhiteboard() {
       h: 66,
       added: true,
     };
+    setGroups((gs) => {
+      if (gs.some((g) => g.gid === gid)) return gs;
+      return [
+        ...gs,
+        {
+          gid,
+          hh,
+          world,
+          nb: neighbour,
+          color,
+          x: 0,
+          y: 0,
+          w: 0,
+          h: 0,
+        },
+      ];
+    });
     setNodesCore((ns) => [...ns, toCore(n)]);
     setSel({ type: 'node', id });
-  }, [worlds]);
+    pendingFocusRef.current = { id, svgWidth, svgHeight };
+  }, [worlds, nodes, groups, nodeVis, viewport]);
 
   const updateNode = useCallback((id: string, patch: Partial<SimNode>) => {
     setNodesCore((ns) =>
@@ -462,15 +559,10 @@ export function useWhiteboard() {
           `${n.first} ${n.sur}`.toLowerCase().includes(query),
       );
       if (!hit) return;
-      const k = 1.1;
-      setViewport({
-        k,
-        tx: svgWidth / 2 - (hit.x + hit.w / 2) * k,
-        ty: svgHeight / 2 - (hit.y + hit.h / 2) * k,
-      });
+      frameSim(hit, svgWidth, svgHeight);
       setSel({ type: 'node', id: hit.id });
     },
-    [nodes, nodeVis],
+    [nodes, nodeVis, frameSim],
   );
 
   const saveJson = useCallback(() => {
@@ -586,6 +678,10 @@ export function useWhiteboard() {
       else next.add(age);
       return next;
     });
+  }, []);
+
+  const toggleSingle = useCallback(() => {
+    setHiSingle((on) => !on);
   }, []);
 
   const moveSimToHousehold = useCallback(
@@ -706,6 +802,8 @@ export function useWhiteboard() {
     connSrc,
     snap,
     hiAges,
+    hiSingle,
+    partneredIds,
     status,
     fastRoute,
     editNodeId,
@@ -761,7 +859,9 @@ export function useWhiteboard() {
     togglePlay,
     setHiddenPlay,
     toggleAge,
+    toggleSingle,
     setHiAges,
+    setHiSingle,
     setHiddenPacks,
     moveSimToHousehold,
     isSelLink,

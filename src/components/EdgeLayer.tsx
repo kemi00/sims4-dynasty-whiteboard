@@ -1,3 +1,4 @@
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { COL, UEDIT } from '../lib/constants.ts';
 import { ptsStr } from '../lib/utils.ts';
 import type { BloodPath, BloodVert, UnionRender } from '../types/whiteboard.ts';
@@ -97,8 +98,9 @@ type Props = {
   userEdgeIds: Set<string>;
   isSelLink: (ids: string[]) => boolean;
   connectMode: boolean;
-  onLinkClick: (ids: string[], e: React.PointerEvent) => void;
-  onUnionClick: (a: string, b: string, e: React.PointerEvent) => void;
+  hitStroke: number;
+  onLinkClick: (ids: string[], e: ReactPointerEvent) => void;
+  onUnionClick: (a: string, b: string, e: ReactPointerEvent) => void;
 };
 
 export function EdgeLayer({
@@ -110,6 +112,7 @@ export function EdgeLayer({
   userEdgeIds,
   isSelLink,
   connectMode,
+  hitStroke,
   onLinkClick,
   onUnionClick,
 }: Props) {
@@ -144,7 +147,7 @@ export function EdgeLayer({
               d={d}
               fill="none"
               stroke="transparent"
-              strokeWidth={16}
+              strokeWidth={hitStroke}
             />
           </g>
         );
@@ -170,7 +173,7 @@ export function EdgeLayer({
               points={u.pts}
               fill="none"
               stroke="transparent"
-              strokeWidth={16}
+              strokeWidth={hitStroke}
             />
             <polyline
               points={u.pts}
@@ -218,7 +221,7 @@ export function EdgeLayer({
               points={pts}
               fill="none"
               stroke="transparent"
-              strokeWidth={16}
+              strokeWidth={hitStroke}
             />
           </g>
         );

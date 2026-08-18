@@ -1,5 +1,6 @@
 import { useEffect, useState, type RefObject } from 'react';
 import { AGES, LIFE_STATES, PLAYABILITY } from '../lib/constants.ts';
+import { useCompactChrome } from '../hooks/useCompactChrome.ts';
 import type { Group, SimNode, World } from '../types/whiteboard.ts';
 
 type Props = {
@@ -35,6 +36,7 @@ export function SimEditor({
   onLayout,
   onClose,
 }: Props) {
+  const compact = useCompactChrome();
   const [name, setName] = useState(`${n.first} ${n.sur}`);
   const [age, setAge] = useState(n.age);
   const [state, setState] = useState(n.state || 'Sim');
@@ -80,12 +82,35 @@ export function SimEditor({
     onLayout();
   }, [moveOpen, onLayout]);
 
+  useEffect(() => {
+    if (!compact) return;
+    const el = editorRef.current;
+    const vv = window.visualViewport;
+    if (!el || !vv) return;
+    const sync = () => {
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      el.style.bottom = `${kb}px`;
+    };
+    sync();
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    return () => {
+      vv.removeEventListener('resize', sync);
+      vv.removeEventListener('scroll', sync);
+      el.style.bottom = '';
+    };
+  }, [compact, editorRef]);
+
   return (
     <div
       ref={editorRef}
       id="editor"
-      className="editor"
-      style={{ display: 'block', left, top }}
+      className={compact ? 'editor editor--sheet' : 'editor'}
+      style={
+        compact
+          ? { display: 'block' }
+          : { display: 'block', left, top }
+      }
     >
       <button className="edx" title="close" onClick={onClose}>
         ✕

@@ -114,3 +114,27 @@ export const PILL_CLEAR = 4;
  * between them. Below this the union connector wraps around the outside.
  */
 export const UNION_MIN_GAP = (PILL_HALF_W + PILL_CLEAR) * 2;
+
+/** Phone chrome / bottom sheets. Keep the CSS `@media` in App.css in sync. */
+export const CHROME_COMPACT_MAX_PX = 640;
+
+/** Inset from the viewport edge when clamping floating chrome. */
+export const CHROME_EDGE_PAD_PX = 6;
+
+/** Gap between a toolbar control and the dropdown that belongs to it. */
+export const CHROME_DROPDOWN_GAP_PX = 6;
+
+/** Zoom used when framing a single sim (search, newly added card). */
+export const FOCUS_SIM_K = 1.1;
+
+/** Screen pixels before a pointer counts as a drag instead of a tap. */
+export const DRAG_SLOP_PX = 10;
+
+/** Coarse-pointer hold on a card opens the editor. */
+export const LONG_PRESS_MS = 450;
+
+/** How long a flash status (layer toggle, etc.) stays on screen. */
+export const STATUS_FLASH_MS = 2800;
+
+/** Transparent hit stroke in screen pixels, converted to world space by `/ k`. */
+export const EDGE_HIT_SCREEN_PX = 16;

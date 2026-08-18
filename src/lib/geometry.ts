@@ -21,6 +21,7 @@ import type {
   ShowToggles,
   SimNode,
   UnionGeom,
+  Viewport,
 } from '../types/whiteboard.ts';
 
 /** Intersection on a sim card border toward (tox, toy). */
@@ -230,6 +231,105 @@ export function hhBoxDraw(
   const lw = label ? label.length * 6.6 + 30 : 0;
   const boxW = Math.max(x1 - x0 + pad * 2, lw + pad);
   return { l: x0 - pad, t: y0 - pad - HDROFF, r: x0 - pad + boxW, b: y1 + pad };
+}
+
+/** Drawn world frame (matches WorldLayer: household union + title/margin). */
+export function worldFrame(
+  world: string,
+  nodes: SimNode[],
+  groups: Group[],
+  packVis: (n: SimNode) => boolean,
+): HhBoxDraw | null {
+  const gids = new Set<string>();
+  for (const n of nodes) {
+    if (n.world !== world || !packVis(n)) continue;
+    gids.add(n.gid);
+  }
+  let x0 = 1e9;
+  let y0 = 1e9;
+  let x1 = -1e9;
+  let y1 = -1e9;
+  let any = false;
+  for (const gid of gids) {
+    const bx = hhBoxDraw(gid, nodes, groups, packVis);
+    if (!bx) continue;
+    any = true;
+    x0 = Math.min(x0, bx.l);
+    y0 = Math.min(y0, bx.t);
+    x1 = Math.max(x1, bx.r);
+    y1 = Math.max(y1, bx.b);
+  }
+  if (!any) return null;
+  const M = LAYOUT.worldMargin;
+  const TITLE = LAYOUT.worldTitle;
+  return { l: x0 - M, t: y0 - TITLE, r: x1 + M, b: y1 + M };
+}
+
+function rectIntersectionArea(a: HhBoxDraw, b: HhBoxDraw): number {
+  const l = Math.max(a.l, b.l);
+  const t = Math.max(a.t, b.t);
+  const r = Math.min(a.r, b.r);
+  const btm = Math.min(a.b, b.b);
+  if (r <= l || btm <= t) return 0;
+  return (r - l) * (btm - t);
+}
+
+function dist2PointToRect(x: number, y: number, r: HhBoxDraw): number {
+  const dx = x < r.l ? r.l - x : x > r.r ? x - r.r : 0;
+  const dy = y < r.t ? r.t - y : y > r.b ? y - r.b : 0;
+  return dx * dx + dy * dy;
+}
+
+/** Visible board area in world coordinates. */
+export function viewportWorldRect(
+  viewport: Viewport,
+  svgWidth: number,
+  svgHeight: number,
+): HhBoxDraw {
+  const { tx, ty, k } = viewport;
+  return {
+    l: -tx / k,
+    t: -ty / k,
+    r: (svgWidth - tx) / k,
+    b: (svgHeight - ty) / k,
+  };
+}
+
+/**
+ * World whose frame covers the most of the current view. If nothing overlaps
+ * (empty gap / zoomed into void), the closest frame to the view centre wins.
+ */
+export function dominantWorldInViewport(
+  nodes: SimNode[],
+  groups: Group[],
+  packVis: (n: SimNode) => boolean,
+  viewport: Viewport,
+  svgWidth: number,
+  svgHeight: number,
+): string | null {
+  const view = viewportWorldRect(viewport, svgWidth, svgHeight);
+  const cx = (view.l + view.r) / 2;
+  const cy = (view.t + view.b) / 2;
+  const names = new Set<string>();
+  for (const n of nodes) {
+    if (!n.world || n.world === '—' || !packVis(n)) continue;
+    names.add(n.world);
+  }
+  let best: string | null = null;
+  let bestArea = -1;
+  let bestDist = Infinity;
+  for (const world of names) {
+    const frame = worldFrame(world, nodes, groups, packVis);
+    if (!frame) continue;
+    const area = rectIntersectionArea(view, frame);
+    const dist = dist2PointToRect(cx, cy, frame);
+    if (area > bestArea || (area === bestArea && dist < bestDist)) {
+      best = world;
+      bestArea = area;
+      bestDist = dist;
+    }
+  }
+  return best;
 }
 
 const HH_SNAP_TH = 16;

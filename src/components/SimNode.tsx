@@ -9,6 +9,8 @@ type Props = {
   selected: boolean;
   connectHighlight: boolean;
   hiAges: Set<string>;
+  hiSingle: boolean;
+  partneredIds: Set<string>;
   onPointerDown: (e: React.PointerEvent, n: SimNode) => void;
 };
 
@@ -17,6 +19,8 @@ export const SimNodeView = memo(function SimNodeView({
   selected,
   connectHighlight,
   hiAges,
+  hiSingle,
+  partneredIds,
   onPointerDown,
 }: Props) {
   const added = !!n.added;
@@ -28,12 +32,12 @@ export const SimNodeView = memo(function SimNodeView({
       ? OCC[n.state]
       : null;
   const hasBadge = !!(speciesBadge || stateBadge);
-  const ageClass =
-    hiAges.size > 0
-      ? isHighlightMatch(n, hiAges)
-        ? 'agehl'
-        : 'agedim'
-      : '';
+  const highlighting = hiAges.size > 0 || hiSingle;
+  const ageClass = highlighting
+    ? isHighlightMatch(n, hiAges, hiSingle, partneredIds)
+      ? 'agehl'
+      : 'agedim'
+    : '';
   const detail = cardDetailLine(n);
   const h = n.h || CARD_H;
 

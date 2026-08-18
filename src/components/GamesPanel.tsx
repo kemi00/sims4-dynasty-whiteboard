@@ -1,3 +1,5 @@
+import { panelPosition } from '../lib/chrome.ts';
+import { useCompactChrome } from '../hooks/useCompactChrome.ts';
 import type { SimNode } from '../types/whiteboard.ts';
 
 type Props = {
@@ -20,9 +22,9 @@ export function GamesPanel({
   onAll,
   onNone,
 }: Props) {
-  if (!anchorRect) return null;
-  let L = anchorRect.left;
-  if (L + 266 > window.innerWidth) L = window.innerWidth - 266;
+  const compact = useCompactChrome();
+  const pos = panelPosition(anchorRect, 266);
+  if (!pos) return null;
 
   const colorOf = (p: string) =>
     nodes.find((x) => x.pack === p)?.color ?? '#9aa0a6';
@@ -31,12 +33,8 @@ export function GamesPanel({
   return (
     <div
       id="games"
-      className="gpanel"
-      style={{
-        display: 'block',
-        left: Math.max(6, L),
-        top: anchorRect.bottom + 6,
-      }}
+      className={compact ? 'gpanel gpanel--sheet' : 'gpanel'}
+      style={{ display: 'block', ...pos }}
     >
       <div className="gph">
         <b>Games / packs</b>

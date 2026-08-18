@@ -1,6 +1,6 @@
 
 *{box-sizing:border-box}
-html,body,#root{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1b2b3a;overflow:hidden}
+html,body,#root{margin:0;height:100%;height:100dvh;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1b2b3a;overflow:hidden}
 #root,#app{display:flex;flex-direction:column;height:100%;min-height:0}
 /* Base for the panels floating over the canvas. Deliberately scoped: the top
    bar owns .tool and must not inherit any of this. */
@@ -37,7 +37,7 @@ html,body,#root{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFon
 }
 
 /* ── top bar ─────────────────────────────────────────────────────────────── */
-.appbar{flex:0 0 auto;height:var(--bar-h);display:flex;align-items:center;gap:5px;padding:0 10px 0 13px;background:var(--chrome);border-bottom:1px solid var(--line);position:relative;z-index:5}
+.appbar{flex:0 0 auto;height:calc(var(--bar-h) + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:5px;padding:0 10px 0 13px;padding-top:env(safe-area-inset-top,0px);background:var(--chrome);border-bottom:1px solid var(--line);position:relative;z-index:5;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:9px;flex:0 0 auto}
 .brand .plumbob{width:14px;height:21px;flex:0 0 auto}
 .brand__name{font-size:13px;font-weight:600;letter-spacing:-.1px;color:var(--ink);white-space:nowrap}
@@ -45,7 +45,7 @@ html,body,#root{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFon
 .appbar__spacer{flex:1 1 auto;min-width:10px}
 
 /* ── the one control ─────────────────────────────────────────────────────── */
-.tool{height:32px;padding:0 10px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid transparent;border-radius:var(--r-control);background:transparent;color:var(--ink-2);font:inherit;font-size:12.5px;font-weight:600;line-height:1;white-space:nowrap;cursor:pointer;transition:background .13s ease,color .13s ease,box-shadow .13s ease}
+.tool{position:relative;height:32px;padding:0 10px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid transparent;border-radius:var(--r-control);background:transparent;color:var(--ink-2);font:inherit;font-size:12.5px;font-weight:600;line-height:1;white-space:nowrap;cursor:pointer;transition:background .13s ease,color .13s ease,box-shadow .13s ease}
 .tool--icon{width:32px;padding:0}
 .tool svg{width:17px;height:17px;flex:0 0 auto}
 .tool:hover:not(:disabled){background:var(--hover);color:var(--ink)}
@@ -53,6 +53,8 @@ html,body,#root{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFon
 .tool:disabled{opacity:.42;cursor:default}
 .tool:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-ring)}
 .tool__count{min-width:17px;height:17px;padding:0 5px;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums}
+/* Icon-only buttons keep the glyph centred; the count sits on the corner. */
+.tool--icon .tool__count{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 4px}
 
 /* Accent marks a mode that changes what your next action does, or a filter
    that is currently narrowing the board. Never the default state. */
@@ -85,7 +87,7 @@ html,body,#root{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFon
 
 /* ── overflow menu ───────────────────────────────────────────────────────── */
 .overflow{position:relative;flex:0 0 auto}
-.pop{position:absolute;top:calc(100% + 7px);right:0;min-width:186px;padding:6px;background:#fff;border:1px solid var(--line);border-radius:var(--r-surface);box-shadow:var(--lift);z-index:30}
+.pop{position:fixed;min-width:186px;padding:6px;background:#fff;border:1px solid var(--line);border-radius:var(--r-surface);box-shadow:var(--lift);z-index:30}
 .pop button{display:flex;align-items:center;gap:10px;width:100%;height:33px;padding:0 9px;border:none;border-radius:var(--r-control);background:transparent;color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;text-align:left;cursor:pointer}
 .pop button svg{width:16px;height:16px;color:var(--ink-3);flex:0 0 auto}
 .pop button:hover{background:var(--hover)}
@@ -119,14 +121,15 @@ html,body,#root{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFon
 }
 @media (max-width:820px){
  .tool__label{display:none}
- .tool{width:32px;padding:0}
+ .tool{width:32px;padding:0;gap:0}
+ .tool .tool__count{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 4px}
  .search{flex-basis:150px}
 }
 @media (prefers-reduced-motion:reduce){
  .tool,.search input,.gpanel button,.menu button,.editor button,.agechips button{transition:none}
  .gpanel button:active,.menu button:active,.editor button:active,.agechips button:active{transform:none}
 }
-#stage{position:relative;flex:1;min-height:0;overflow:hidden;background:radial-gradient(circle at 1px 1px,#dcd6c7 1px,transparent 0) 0 0/24px 24px,#f4f1e8}
+#stage{position:relative;flex:1;min-height:0;overflow:hidden;touch-action:none;overscroll-behavior:none;background:radial-gradient(circle at 1px 1px,#dcd6c7 1px,transparent 0) 0 0/24px 24px,#f4f1e8}
 svg{width:100%;height:100%;display:block;touch-action:none}
 #hint{position:absolute;left:12px;bottom:12px;background:#fffdf8f5;border:1px solid var(--line);border-radius:var(--r-surface);padding:10px 26px 10px 12px;font-size:11px;max-width:300px;box-shadow:var(--lift);line-height:1.5}
 #hintClose{position:absolute;top:5px;right:6px;width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;border:none;background:#eee7d6;color:#7a6f56;border-radius:50%;cursor:pointer;padding:0}
@@ -135,9 +138,9 @@ svg{width:100%;height:100%;display:block;touch-action:none}
 #hintIcon{position:absolute;left:12px;bottom:12px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--chrome);color:var(--ink-2);cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:var(--lift);padding:0}
 #hintIcon svg{width:18px;height:18px}
 #hintIcon:hover{background:var(--hover);color:var(--ink)}
-#status{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:6px 13px;border-radius:999px;font-size:12px;font-weight:600;box-shadow:var(--lift);display:none}
+#status{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:6px 13px;border-radius:999px;font-size:12px;font-weight:600;box-shadow:var(--lift);display:none;max-width:min(520px, calc(100% - 24px));text-align:center;line-height:1.35;z-index:8}
 /* Height is capped so a long legend never reaches the floating view controls. */
-#legend{position:absolute;right:12px;top:12px;background:#fffdf8f2;border:1px solid var(--line);border-radius:var(--r-surface);padding:8px 10px;font-size:10px;max-height:calc(100% - 84px);overflow:auto;box-shadow:var(--lift);width:150px}
+#legend{position:absolute;right:12px;top:12px;background:#fffdf8f2;border:1px solid var(--line);border-radius:var(--r-surface);padding:8px 10px;font-size:10px;max-height:calc(100% - 84px);overflow:auto;overscroll-behavior:contain;box-shadow:var(--lift);width:150px}
 #legend h3{margin:0 0 4px;font-size:9px;letter-spacing:.4px;text-transform:uppercase;color:#8a7f63}
 .lg{display:flex;align-items:center;gap:5px;margin:1.5px 0}
 .lg i{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
@@ -172,7 +175,7 @@ svg{width:100%;height:100%;display:block;touch-action:none}
 .agechips button{padding:5px 10px;border:1px solid #e0d8c6;background:#faf7f0;color:#3b4757;border-radius:16px;font-weight:600}
 .agechips button.on{background:#f5a300;color:#fff;border-color:#f5a300}
 .menu button:hover{background:#e7eefb}
-.editor{padding:10px;width:252px;max-height:calc(100vh - 16px);overflow:auto}
+.editor{padding:10px;width:252px;max-height:calc(100vh - 16px);overflow:auto;overscroll-behavior:contain}
 .editor label{display:block;font-size:10px;color:#667;margin:7px 0 2px;text-transform:uppercase;letter-spacing:.3px}
 .editor input,.editor select{width:100%;padding:5px;border:1px solid #cdd3da;border-radius:6px;font-size:12px;box-sizing:border-box}
 .editor .row{display:flex;gap:6px;margin-top:10px}
@@ -186,3 +189,40 @@ svg{width:100%;height:100%;display:block;touch-action:none}
 .editor .movego:hover{background:#155bb8}
 .editor .edx{position:absolute;top:7px;right:8px;width:21px;height:21px;border:none;background:#eef0f3;color:#5a6673;border-radius:50%;font-size:11px;line-height:1;cursor:pointer;padding:0;z-index:3}
 .editor .edx:hover{background:#e0e4e9}
+
+.appbar__desktop-filters{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto}
+.appbar__compact-only{display:none}
+.appbar__compact-tools{align-items:center;gap:2px;flex:0 0 auto}
+.search-overlay{display:none}
+
+.legend-chip{position:absolute;right:12px;top:12px;z-index:6;height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--chrome);color:var(--ink-2);font:inherit;font-size:12px;font-weight:600;box-shadow:var(--lift);cursor:pointer}
+.legend-chip:hover{background:var(--hover);color:var(--ink)}
+.legend-close{float:right;margin:-2px 0 6px;border:none;background:transparent;color:var(--ink-3);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+
+@media (pointer:coarse){
+ .tool{height:44px}
+ .tool--icon{width:44px;height:44px}
+ .appbar{min-height:calc(var(--bar-h) + env(safe-area-inset-top,0px));height:auto}
+ .menu button,.gpanel .grow,.agechips button,.pop button{min-height:44px}
+}
+
+/* Keep in sync with CHROME_COMPACT_MAX_PX in src/lib/constants.ts */
+@media (max-width:640px){
+ .appbar{height:auto;min-height:calc(var(--bar-h) + env(safe-area-inset-top,0px));row-gap:6px;padding-bottom:6px}
+ .appbar__desktop-filters,.search--bar{display:none}
+ .appbar__compact-only{display:flex}
+ .search-overlay{display:block;flex:1 0 100%;position:relative;padding:0 2px 2px}
+ .search-overlay input{width:100%;height:36px;padding:0 10px 0 29px;border:1px solid var(--line);border-radius:var(--r-control);background:#fff;color:var(--ink);font:inherit;font-size:16px}
+ .search-overlay .search__icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--ink-3);pointer-events:none}
+ .gpanel--sheet,.menu--sheet,.editor--sheet,#legend.legend--sheet{
+  left:0!important;right:0;top:auto!important;bottom:0;width:auto!important;max-width:none;max-height:70dvh;border-radius:16px 16px 0 0;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
+ }
+ .editor--sheet{width:auto;max-height:min(70dvh,100%)}
+ .menu--sheet{z-index:70;position:fixed}
+ .viewctl{right:max(12px, env(safe-area-inset-right,0px));bottom:max(12px, env(safe-area-inset-bottom,0px))}
+ #hint,#hintIcon{left:max(12px, env(safe-area-inset-left,0px));bottom:max(12px, env(safe-area-inset-bottom,0px));max-width:min(300px, calc(100% - 24px))}
+ .legend-chip{right:max(12px, env(safe-area-inset-right,0px));top:12px}
+ #legend.legend--sheet{position:absolute;right:0;top:auto;width:auto}
+ .tool[data-tone=danger]:not(:disabled){background:var(--danger-soft);color:var(--danger)}
+}
+

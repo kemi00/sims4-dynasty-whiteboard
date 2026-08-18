@@ -1,4 +1,5 @@
 import {
+  Funnel,
   GameController,
   Globe,
   Highlighter,
@@ -10,36 +11,97 @@ import {
   TreeStructure,
   UserPlus,
 } from '@phosphor-icons/react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCompactChrome } from '../hooks/useCompactChrome.ts';
+import { useDropdownPosition } from '../hooks/useDropdownPosition.ts';
 import type { WhiteboardApi } from '../hooks/useWhiteboard.ts';
 import { OverflowMenu } from './OverflowMenu.tsx';
 import { ToolButton } from './ToolButton.tsx';
 
 type Props = {
   wb: WhiteboardApi;
-  svgRef: React.RefObject<SVGSVGElement | null>;
-  gamesBtnRef: React.RefObject<HTMLButtonElement | null>;
-  agesBtnRef: React.RefObject<HTMLButtonElement | null>;
-  playBtnRef: React.RefObject<HTMLButtonElement | null>;
+  svgRef: RefObject<SVGSVGElement | null>;
+  gamesBtnRef: RefObject<HTMLButtonElement | null>;
+  agesBtnRef: RefObject<HTMLButtonElement | null>;
+  playBtnRef: RefObject<HTMLButtonElement | null>;
 };
 
 export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef, playBtnRef }: Props) {
+  const compact = useCompactChrome();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
+  const compactSearchRef = useRef<HTMLInputElement>(null);
+  const { popRef: filtersPopRef, style: filtersPopStyle } = useDropdownPosition(
+    filtersOpen,
+    filtersRef,
+  );
+
   const hiddenCount = wb.hiddenPacks.size;
   const playHidden = wb.hiddenPlay.size;
-  const ageCount = wb.hiAges.size;
+  const ageCount = wb.hiAges.size + (wb.hiSingle ? 1 : 0);
+  const filterCount = hiddenCount + playHidden + ageCount;
 
   const svgSize = () => {
     const r = svgRef.current?.getBoundingClientRect();
     return { w: r?.width ?? 800, h: r?.height ?? 600 };
   };
 
-  const addAtCentre = () => {
+  const addNewSim = () => {
     const r = svgRef.current?.getBoundingClientRect();
     if (!r) return;
-    const { tx, ty, k } = wb.viewport;
-    wb.addSim(
-      Math.round((r.width / 2 - tx) / k),
-      Math.round((r.height / 2 - ty) / k),
-    );
+    wb.addSim(r.width, r.height);
+  };
+
+  const search = (value: string) => {
+    const { w, h } = svgSize();
+    wb.searchSim(value, w, h);
+  };
+
+  useEffect(() => {
+    if (!searchOpen || !compact) return;
+    compactSearchRef.current?.focus();
+  }, [searchOpen, compact]);
+
+  useEffect(() => {
+    if (!compact) setSearchOpen(false);
+  }, [compact]);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onPointer = (ev: PointerEvent) => {
+      if (!filtersRef.current?.contains(ev.target as Node)) {
+        setFiltersOpen(false);
+      }
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') setFiltersOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [filtersOpen]);
+
+  const openGames = () => {
+    setFiltersOpen(false);
+    wb.setAgesOpen(false);
+    wb.setPlayOpen(false);
+    wb.setGamesOpen(!wb.gamesOpen);
+  };
+  const openPlay = () => {
+    setFiltersOpen(false);
+    wb.setGamesOpen(false);
+    wb.setAgesOpen(false);
+    wb.setPlayOpen(!wb.playOpen);
+  };
+  const openAges = () => {
+    setFiltersOpen(false);
+    wb.setGamesOpen(false);
+    wb.setPlayOpen(false);
+    wb.setAgesOpen(!wb.agesOpen);
   };
 
   return (
@@ -68,7 +130,7 @@ export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef, playBtnRef }: Prop
       >
         Connect
       </ToolButton>
-      <ToolButton icon={UserPlus} label="Add a sim" onClick={addAtCentre}>
+      <ToolButton icon={UserPlus} label="Add a sim" onClick={addNewSim}>
         Add sim
       </ToolButton>
       <ToolButton
@@ -102,81 +164,112 @@ export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef, playBtnRef }: Prop
         />
       </span>
 
-      <ToolButton
-        id="btnGames"
-        ref={gamesBtnRef}
-        icon={GameController}
-        label={
-          hiddenCount
-            ? `Games and packs. ${hiddenCount} hidden.`
-            : 'Games and packs'
-        }
-        pressed={hiddenCount > 0}
-        count={hiddenCount}
-        expanded={wb.gamesOpen}
-        onClick={() => {
-          wb.setAgesOpen(false);
-          wb.setPlayOpen(false);
-          wb.setGamesOpen(!wb.gamesOpen);
-        }}
-      >
-        Games
-      </ToolButton>
-      <ToolButton
-        id="btnPlay"
-        ref={playBtnRef}
-        icon={IdentificationBadge}
-        label={
-          playHidden
-            ? `Playability. ${playHidden} hidden.`
-            : 'Playability'
-        }
-        pressed={playHidden > 0}
-        count={playHidden}
-        expanded={wb.playOpen}
-        onClick={() => {
-          wb.setGamesOpen(false);
-          wb.setAgesOpen(false);
-          wb.setPlayOpen(!wb.playOpen);
-        }}
-      >
-        Play
-      </ToolButton>
-      <ToolButton
-        id="btnAges"
-        ref={agesBtnRef}
-        icon={Highlighter}
-        label={
-          ageCount
-            ? `Highlight by age. ${ageCount} selected.`
-            : 'Highlight by age'
-        }
-        pressed={ageCount > 0}
-        count={ageCount}
-        expanded={wb.agesOpen}
-        onClick={() => {
-          wb.setGamesOpen(false);
-          wb.setPlayOpen(false);
-          wb.setAgesOpen(!wb.agesOpen);
-        }}
-      >
-        Ages
-      </ToolButton>
+      <span className="appbar__desktop-filters">
+        <ToolButton
+          id="btnGames"
+          ref={gamesBtnRef}
+          icon={GameController}
+          label={
+            hiddenCount
+              ? `Games and packs. ${hiddenCount} hidden.`
+              : 'Games and packs'
+          }
+          pressed={hiddenCount > 0}
+          count={hiddenCount}
+          expanded={wb.gamesOpen}
+          onClick={openGames}
+        >
+          Games
+        </ToolButton>
+        <ToolButton
+          id="btnPlay"
+          ref={playBtnRef}
+          icon={IdentificationBadge}
+          label={
+            playHidden
+              ? `Playability. ${playHidden} hidden.`
+              : 'Playability'
+          }
+          pressed={playHidden > 0}
+          count={playHidden}
+          expanded={wb.playOpen}
+          onClick={openPlay}
+        >
+          Play
+        </ToolButton>
+        <ToolButton
+          id="btnAges"
+          ref={agesBtnRef}
+          icon={Highlighter}
+          label={
+            ageCount
+              ? `Highlight by age or status. ${ageCount} selected.`
+              : 'Highlight by age or status'
+          }
+          pressed={ageCount > 0}
+          count={ageCount}
+          expanded={wb.agesOpen}
+          onClick={openAges}
+        >
+          Ages
+        </ToolButton>
+      </span>
 
       <span className="appbar__spacer" />
 
-      <span className="search">
+      <span className="search search--bar">
         <MagnifyingGlass className="search__icon" aria-hidden="true" />
         <input
           id="search"
           type="search"
           aria-label="Find a sim"
           placeholder="Find a sim"
-          onInput={(e) => {
-            const { w, h } = svgSize();
-            wb.searchSim(e.currentTarget.value, w, h);
-          }}
+          onInput={(e) => search(e.currentTarget.value)}
         />
+      </span>
+
+      <span className="appbar__compact-only appbar__compact-tools">
+        <ToolButton
+          icon={MagnifyingGlass}
+          label="Find a sim"
+          pressed={searchOpen}
+          onClick={() => setSearchOpen((o) => !o)}
+        />
+        <div className="overflow" ref={filtersRef}>
+          <ToolButton
+            icon={Funnel}
+            label="Filters"
+            pressed={filterCount > 0 || wb.gamesOpen || wb.playOpen || wb.agesOpen}
+            count={filterCount}
+            expanded={filtersOpen}
+            onClick={() => setFiltersOpen((o) => !o)}
+          />
+          {filtersOpen && (
+            <div
+              ref={filtersPopRef}
+              className="pop"
+              role="menu"
+              aria-label="Filters"
+              style={filtersPopStyle}
+            >
+              <button type="button" role="menuitem" onClick={openGames}>
+                <GameController aria-hidden="true" />
+                Games
+                {hiddenCount ? ` (${hiddenCount})` : ''}
+              </button>
+              <button type="button" role="menuitem" onClick={openPlay}>
+                <IdentificationBadge aria-hidden="true" />
+                Play
+                {playHidden ? ` (${playHidden})` : ''}
+              </button>
+              <button type="button" role="menuitem" onClick={openAges}>
+                <Highlighter aria-hidden="true" />
+                Ages
+                {ageCount ? ` (${ageCount})` : ''}
+              </button>
+            </div>
+          )}
+        </div>
       </span>
 
       <OverflowMenu
@@ -189,6 +282,19 @@ export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef, playBtnRef }: Prop
           if (svgRef.current) wb.exportPng(svgRef.current);
         }}
       />
+
+      {compact && searchOpen && (
+        <div className="search-overlay">
+          <MagnifyingGlass className="search__icon" aria-hidden="true" />
+          <input
+            ref={compactSearchRef}
+            type="search"
+            aria-label="Find a sim"
+            placeholder="Find a sim"
+            onInput={(e) => search(e.currentTarget.value)}
+          />
+        </div>
+      )}
     </header>
   );
 }

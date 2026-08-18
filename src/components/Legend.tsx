@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import type { Ref } from 'react';
 import type { World } from '../types/whiteboard.ts';
+import { useCompactChrome } from '../hooks/useCompactChrome.ts';
 
 type Props = {
   worlds: World[];
@@ -10,8 +12,42 @@ type Props = {
 };
 
 export function Legend({ worlds, liveWorlds, onPickWorld, ref }: Props) {
+  const compact = useCompactChrome();
+  const [expanded, setExpanded] = useState(!compact);
+
+  useEffect(() => {
+    if (compact) setExpanded(false);
+  }, [compact]);
+
+  if (compact && !expanded) {
+    return (
+      <button
+        type="button"
+        className="legend-chip"
+        aria-expanded={false}
+        onClick={() => setExpanded(true)}
+      >
+        Legend
+      </button>
+    );
+  }
+
   return (
-    <div id="legend" ref={ref}>
+    <div
+      id="legend"
+      ref={ref}
+      className={compact ? 'legend--sheet' : undefined}
+    >
+      {compact && (
+        <button
+          type="button"
+          className="legend-close"
+          aria-label="Close legend"
+          onClick={() => setExpanded(false)}
+        >
+          Close
+        </button>
+      )}
       <h3>Worlds</h3>
       {worlds.map((w) => {
         const live = liveWorlds.has(w.name);

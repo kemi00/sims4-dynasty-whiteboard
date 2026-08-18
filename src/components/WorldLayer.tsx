@@ -1,5 +1,5 @@
-import { hhBoxDraw } from '../lib/geometry.ts';
-import { LAYOUT } from '../lib/layout.ts';
+import type { PointerEvent as ReactPointerEvent } from 'react';
+import { worldFrame } from '../lib/geometry.ts';
 import { worldColor } from '../lib/utils.ts';
 import type { Group, SimNode, World } from '../types/whiteboard.ts';
 
@@ -14,6 +14,7 @@ type Props = {
     wx: number,
     wy: number,
     base: Record<string, { ox: number; oy: number }>,
+    ev: ReactPointerEvent,
   ) => void;
 };
 
@@ -27,38 +28,25 @@ export function WorldLayer({
 }: Props) {
   if (!show) return null;
 
-  const byW: Record<string, Set<string>> = {};
-  nodes.forEach((n) => {
+  const worldNames: string[] = [];
+  const seen = new Set<string>();
+  for (const n of nodes) {
     const w = n.world;
-    if (!w || w === '—' || !packVis(n)) return;
-    (byW[w] = byW[w] || new Set()).add(n.gid);
-  });
+    if (!w || w === '—' || !packVis(n) || seen.has(w)) continue;
+    seen.add(w);
+    worldNames.push(w);
+  }
 
   return (
     <g id="lWorlds">
-      {Object.keys(byW).map((w) => {
-        let x0 = 1e9,
-          y0 = 1e9,
-          x1 = -1e9,
-          y1 = -1e9,
-          any = false;
-        byW[w]!.forEach((gid) => {
-          const bx = hhBoxDraw(gid, nodes, groups, packVis);
-          if (!bx) return;
-          any = true;
-          x0 = Math.min(x0, bx.l);
-          y0 = Math.min(y0, bx.t);
-          x1 = Math.max(x1, bx.r);
-          y1 = Math.max(y1, bx.b);
-        });
-        if (!any) return null;
+      {worldNames.map((w) => {
+        const frame = worldFrame(w, nodes, groups, packVis);
+        if (!frame) return null;
         const col = worldColor(w, worlds);
-        const M = LAYOUT.worldMargin;
-        const TITLE = LAYOUT.worldTitle;
-        const bx = x0 - M;
-        const by = y0 - TITLE;
-        const bw = x1 - x0 + M * 2;
-        const bh = y1 - y0 + TITLE + M;
+        const bx = frame.l;
+        const by = frame.t;
+        const bw = frame.r - frame.l;
+        const bh = frame.b - frame.t;
         const lw = w.length * 8.2 + 46;
         return (
           <g key={w}>
@@ -90,8 +78,7 @@ export function WorldLayer({
                 ) as { tx: number; ty: number; k: number };
                 const wx = (ev.clientX - r.left - tx) / k;
                 const wy = (ev.clientY - r.top - ty) / k;
-                onWorldDragStart(w, wx, wy, base);
-                (ev.currentTarget as Element).setPointerCapture(ev.pointerId);
+                onWorldDragStart(w, wx, wy, base, ev);
               }}
             >
               <rect

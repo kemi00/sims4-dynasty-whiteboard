@@ -1,3 +1,5 @@
+import { useCompactChrome } from '../hooks/useCompactChrome.ts';
+
 type Props = {
   aName: string;
   bName: string;
@@ -34,14 +36,19 @@ export function ConnectMenu({
   onConfirm,
   onCancel,
 }: Props) {
+  const compact = useCompactChrome();
   const options = hideSibling
     ? OPTIONS.filter(([ty]) => ty !== 'sibling')
     : OPTIONS;
   return (
     <div
       id="menu"
-      className="menu"
-      style={{ display: 'block', left, top }}
+      className={compact ? 'menu menu--sheet' : 'menu'}
+      style={
+        compact
+          ? { display: 'block' }
+          : { display: 'block', left, top }
+      }
     >
       <div style={{ fontSize: 10, color: '#889', padding: '2px 4px' }}>
         {aName} ↔ {bName}

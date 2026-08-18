@@ -6,9 +6,15 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { border, unionGeom, type SnapSticky } from '../lib/geometry.ts';
-import { CARD_H } from '../lib/constants.ts';
+import {
+  CARD_H,
+  DRAG_SLOP_PX,
+  EDGE_HIT_SCREEN_PX,
+  LONG_PRESS_MS,
+} from '../lib/constants.ts';
 import { isUserE, siblingsShareParents } from '../lib/utils.ts';
 import type { WhiteboardApi } from '../hooks/useWhiteboard.ts';
+import { useCompactChrome } from '../hooks/useCompactChrome.ts';
 import type { SimNode } from '../types/whiteboard.ts';
 import { ConnectMenu } from './ConnectMenu.tsx';
 import { EdgeLayer } from './EdgeLayer.tsx';
@@ -26,7 +32,11 @@ type Props = {
   stageRef: React.RefObject<HTMLDivElement | null>;
 };
 
+/** Chrome on #stage that owns its own wheel (scroll), not board zoom. */
+const STAGE_WHEEL_SCROLL_SEL = '#legend, .legend-chip, .editor, .menu';
+
 export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
+  const compact = useCompactChrome();
   const [guides, setGuides] = useState<{ gx: number[]; gy: number[] } | null>(
     null,
   );
@@ -44,12 +54,16 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     y: number;
     tx: number;
     ty: number;
+    armed: boolean;
   } | null>(null);
   const dragRef = useRef<{
     n: SimNode;
     dx: number;
     dy: number;
     sticky: SnapSticky;
+    sx: number;
+    sy: number;
+    armed: boolean;
   } | null>(null);
   const legendRef = useRef<HTMLDivElement>(null);
   const movedRef = useRef(false);
@@ -59,13 +73,31 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     sx: number;
     sy: number;
     base: Record<string, { ox: number; oy: number }>;
+    px: number;
+    py: number;
+    armed: boolean;
   } | null>(null);
   const worldDragRef = useRef<{
     world: string;
     sx: number;
     sy: number;
     base: Record<string, { ox: number; oy: number }>;
+    px: number;
+    py: number;
+    armed: boolean;
   } | null>(null);
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{
+    dist: number;
+    worldX: number;
+    worldY: number;
+    k: number;
+  } | null>(null);
+  const leftoverRef = useRef<number | null>(null);
+  const connectTapRef = useRef(false);
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wbRef = useRef(wb);
+  wbRef.current = wb;
 
   const { tx, ty, k } = wb.viewport;
 
@@ -152,6 +184,8 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     const el = stageRef.current;
     if (!el) return;
     const onWheel = (ev: WheelEvent) => {
+      const t = ev.target as Element | null;
+      if (t?.closest?.(STAGE_WHEEL_SCROLL_SEL)) return;
       ev.preventDefault();
       let dy = ev.deltaY;
       if (ev.deltaMode === 1) dy *= 16;
@@ -159,11 +193,67 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
       const step = ev.ctrlKey ? 0.01 : 0.0032;
       dy = Math.max(-80, Math.min(80, dy));
       const r = svgRef.current!.getBoundingClientRect();
-      wb.zoomAt(Math.exp(-dy * step), ev.clientX, ev.clientY, r);
+      wbRef.current.zoomAt(Math.exp(-dy * step), ev.clientX, ev.clientY, r);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [stageRef, svgRef, wb]);
+  }, [stageRef, svgRef]);
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const chromeSel =
+      '.viewctl, #legend, #hint, #hintIcon, .editor, .menu, #status, .legend-chip';
+    const onTouchStart = (ev: TouchEvent) => {
+      const t = ev.target as Element | null;
+      if (t?.closest?.(chromeSel)) return;
+      ev.preventDefault();
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    return () => el.removeEventListener('touchstart', onTouchStart);
+  }, [stageRef]);
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    type SafariGestureEvent = Event & {
+      scale: number;
+      clientX: number;
+      clientY: number;
+    };
+    let gscale = 1;
+    const onStart = (ev: Event) => {
+      ev.preventDefault();
+      gscale = (ev as SafariGestureEvent).scale || 1;
+    };
+    const onChange = (ev: Event) => {
+      ev.preventDefault();
+      if (pointersRef.current.size >= 2) return;
+      const gev = ev as SafariGestureEvent;
+      const s = gev.scale || 1;
+      if (gscale > 0) {
+        const r = svgRef.current?.getBoundingClientRect();
+        if (r) {
+          wbRef.current.zoomAt(
+            Math.pow(s / gscale, 3.2),
+            gev.clientX,
+            gev.clientY,
+            r,
+          );
+        }
+      }
+      gscale = s;
+    };
+    const onEnd = (ev: Event) => ev.preventDefault();
+    el.addEventListener('gesturestart', onStart, { passive: false });
+    el.addEventListener('gesturechange', onChange, { passive: false });
+    el.addEventListener('gestureend', onEnd, { passive: false });
+    return () => {
+      el.removeEventListener('gesturestart', onStart);
+      el.removeEventListener('gesturechange', onChange);
+      el.removeEventListener('gestureend', onEnd);
+    };
+  }, [stageRef, svgRef]);
 
   // Fit exactly once, as soon as the stage has been laid out. This must not
   // depend on wb.fit: that identity changes on every node edit, and observing
@@ -220,16 +310,109 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     [toWorld, wb],
   );
 
+  const clearLongPress = () => {
+    if (longPressRef.current != null) {
+      clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+  };
+
+  const captureSvg = (pointerId: number) => {
+    try {
+      svgRef.current?.setPointerCapture(pointerId);
+    } catch {
+      /* setPointerCapture can throw if the pointer is already gone */
+    }
+  };
+
+  const rememberPointer = (ev: ReactPointerEvent) => {
+    pointersRef.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  };
+
+  const forgetPointer = (pointerId: number) => {
+    pointersRef.current.delete(pointerId);
+  };
+
+  const cancelObjectDrags = () => {
+    clearLongPress();
+    dragRef.current = null;
+    hhDragRef.current = null;
+    worldDragRef.current = null;
+    panRef.current = null;
+    movedRef.current = false;
+    wb.setFastRoute(false);
+    setGuides(null);
+  };
+
+  const beginPinch = () => {
+    cancelObjectDrags();
+    leftoverRef.current = null;
+    connectTapRef.current = false;
+    const pts = [...pointersRef.current.values()];
+    if (pts.length < 2) {
+      pinchRef.current = null;
+      return;
+    }
+    const a = pts[0]!;
+    const b = pts[1]!;
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    if (dist < 1) return;
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+    const [worldX, worldY] = toWorld(midX, midY);
+    pinchRef.current = {
+      dist,
+      worldX,
+      worldY,
+      k: wbRef.current.viewport.k,
+    };
+  };
+
+  const updatePinch = () => {
+    const pinch = pinchRef.current;
+    const svg = svgRef.current;
+    if (!pinch || !svg) return;
+    const pts = [...pointersRef.current.values()];
+    if (pts.length < 2) return;
+    const a = pts[0]!;
+    const b = pts[1]!;
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    if (dist < 1) return;
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+    const nk = Math.min(4, Math.max(0.06, pinch.k * (dist / pinch.dist)));
+    const r = svg.getBoundingClientRect();
+    wbRef.current.setViewport({
+      k: nk,
+      tx: midX - r.left - pinch.worldX * nk,
+      ty: midY - r.top - pinch.worldY * nk,
+    });
+  };
+
+  const pastSlop = (sx: number, sy: number, x: number, y: number) =>
+    Math.hypot(x - sx, y - sy) >= DRAG_SLOP_PX;
+
   const onSvgPointerDown = (ev: ReactPointerEvent) => {
+    if (ev.button !== 0) return;
+    rememberPointer(ev);
+    captureSvg(ev.pointerId);
+
+    if (pointersRef.current.size >= 2) {
+      beginPinch();
+      return;
+    }
+    if (leftoverRef.current != null) return;
+
+    const t = ev.target as Element;
     if (
-      (ev.target as Element).closest('.node') ||
-      (ev.target as Element).closest('.edge') ||
-      (ev.target as Element).closest('.hhandle') ||
-      (ev.target as Element).closest('.whandle')
+      t.closest('.node') ||
+      t.closest('.edge') ||
+      t.closest('.hhandle') ||
+      t.closest('.whandle')
     )
       return;
     if (wb.connectMode) {
-      wb.cancelConnect();
+      connectTapRef.current = true;
       return;
     }
     wb.clearSel();
@@ -238,13 +421,26 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
       y: ev.clientY,
       tx,
       ty,
+      armed: false,
     };
-    svgRef.current!.setPointerCapture(ev.pointerId);
   };
 
   const onSvgPointerMove = (ev: ReactPointerEvent) => {
+    if (pointersRef.current.has(ev.pointerId)) {
+      pointersRef.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    }
+    if (pinchRef.current && pointersRef.current.size >= 2) {
+      updatePinch();
+      return;
+    }
+    if (leftoverRef.current != null) return;
+
     if (worldDragRef.current) {
       const d = worldDragRef.current;
+      if (!d.armed) {
+        if (!pastSlop(d.px, d.py, ev.clientX, ev.clientY)) return;
+        d.armed = true;
+      }
       const [wx, wy] = toWorld(ev.clientX, ev.clientY);
       const dx = wx - d.sx;
       const dy = wy - d.sy;
@@ -253,6 +449,10 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     }
     if (hhDragRef.current) {
       const d = hhDragRef.current;
+      if (!d.armed) {
+        if (!pastSlop(d.px, d.py, ev.clientX, ev.clientY)) return;
+        d.armed = true;
+      }
       const [wx, wy] = toWorld(ev.clientX, ev.clientY);
       const dx = wx - d.sx;
       const dy = wy - d.sy;
@@ -268,6 +468,11 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     }
     if (dragRef.current) {
       const d = dragRef.current;
+      if (!d.armed) {
+        if (!pastSlop(d.sx, d.sy, ev.clientX, ev.clientY)) return;
+        d.armed = true;
+        clearLongPress();
+      }
       const [wx, wy] = toWorld(ev.clientX, ev.clientY);
       wb.setFastRoute(true);
       const rawX = wx - d.dx;
@@ -281,6 +486,10 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     }
     if (panRef.current) {
       const p = panRef.current;
+      if (!p.armed) {
+        if (!pastSlop(p.x, p.y, ev.clientX, ev.clientY)) return;
+        p.armed = true;
+      }
       wb.setViewport({
         k,
         tx: p.tx + (ev.clientX - p.x),
@@ -290,7 +499,61 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     if (wb.connSrc) updateTemp(ev.clientX, ev.clientY);
   };
 
-  const onSvgPointerUp = () => {
+  const finishNodePointer = (wasMoved: boolean, n: SimNode) => {
+    wb.setFastRoute(false);
+    setGuides(null);
+    if (wasMoved) {
+      const cur = wb.byid[n.id];
+      if (cur) wb.snapNodeAction(cur);
+      return;
+    }
+    const now = performance.now();
+    if (
+      lastClickRef.current?.id === n.id &&
+      now - lastClickRef.current.t < 380
+    ) {
+      lastClickRef.current = null;
+      wb.setEditNodeId(n.id);
+      positionEditor();
+    } else {
+      lastClickRef.current = { id: n.id, t: now };
+      wb.selectNode(n.id);
+    }
+  };
+
+  const onSvgPointerUp = (ev: ReactPointerEvent) => {
+    const known =
+      pointersRef.current.has(ev.pointerId) ||
+      leftoverRef.current === ev.pointerId ||
+      dragRef.current != null ||
+      panRef.current != null ||
+      pinchRef.current != null ||
+      hhDragRef.current != null ||
+      worldDragRef.current != null;
+    if (!known) return;
+
+    forgetPointer(ev.pointerId);
+    clearLongPress();
+
+    if (pinchRef.current) {
+      if (pointersRef.current.size >= 2) {
+        beginPinch();
+        return;
+      }
+      pinchRef.current = null;
+      leftoverRef.current =
+        pointersRef.current.size === 1
+          ? ([...pointersRef.current.keys()][0] ?? null)
+          : null;
+      cancelObjectDrags();
+      return;
+    }
+
+    if (leftoverRef.current === ev.pointerId) {
+      leftoverRef.current = null;
+      return;
+    }
+
     if (hhDragRef.current || worldDragRef.current) {
       setGuides(null);
       hhDragRef.current = null;
@@ -300,41 +563,58 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
       const n = dragRef.current.n;
       const wasMoved = movedRef.current;
       dragRef.current = null;
-      wb.setFastRoute(false);
-      setGuides(null);
-      if (wasMoved) {
-        const cur = wb.byid[n.id];
-        if (cur) wb.snapNodeAction(cur);
-        return;
-      }
-      const now = performance.now();
-      if (
-        lastClickRef.current?.id === n.id &&
-        now - lastClickRef.current.t < 380
-      ) {
-        lastClickRef.current = null;
-        wb.setEditNodeId(n.id);
-        positionEditor();
-      } else {
-        lastClickRef.current = { id: n.id, t: now };
-        wb.selectNode(n.id);
-      }
+      finishNodePointer(wasMoved, n);
       return;
     }
     panRef.current = null;
+    if (connectTapRef.current && pointersRef.current.size === 0) {
+      connectTapRef.current = false;
+      wb.cancelConnect();
+    }
   };
 
   const onNodePointerDown = (ev: ReactPointerEvent, n: SimNode) => {
     ev.stopPropagation();
+    rememberPointer(ev);
+    captureSvg(ev.pointerId);
+
+    if (pointersRef.current.size >= 2) {
+      beginPinch();
+      return;
+    }
     if (wb.connectMode) {
       const sr = stageRef.current!.getBoundingClientRect();
       wb.handleConnectClick(n, ev.clientX, ev.clientY, sr);
       return;
     }
     const [wx, wy] = toWorld(ev.clientX, ev.clientY);
-    dragRef.current = { n, dx: wx - n.x, dy: wy - n.y, sticky: { x: null, y: null } };
+    dragRef.current = {
+      n,
+      dx: wx - n.x,
+      dy: wy - n.y,
+      sticky: { x: null, y: null },
+      sx: ev.clientX,
+      sy: ev.clientY,
+      armed: false,
+    };
     movedRef.current = false;
-    (ev.currentTarget as Element).setPointerCapture(ev.pointerId);
+    clearLongPress();
+    if (ev.pointerType !== 'mouse') {
+      longPressRef.current = setTimeout(() => {
+        longPressRef.current = null;
+        if (!dragRef.current || dragRef.current.armed) return;
+        const node = dragRef.current.n;
+        dragRef.current = null;
+        wbRef.current.setEditNodeId(node.id);
+        positionEditor();
+      }, LONG_PRESS_MS);
+    }
+  };
+
+  const onHandlePointer = (ev: ReactPointerEvent) => {
+    rememberPointer(ev);
+    captureSvg(ev.pointerId);
+    if (pointersRef.current.size >= 2) beginPinch();
   };
 
   const sortedNodes = [...wb.visibleNodes];
@@ -360,7 +640,8 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
         onPointerDown={onSvgPointerDown}
         onPointerMove={onSvgPointerMove}
         onPointerUp={onSvgPointerUp}
-        onPointerLeave={onSvgPointerUp}
+        onPointerCancel={onSvgPointerUp}
+        onLostPointerCapture={onSvgPointerUp}
       >
         <defs>
           <clipPath id="tagclip">
@@ -378,8 +659,18 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
             worlds={wb.worlds}
             show={wb.show.worlds}
             packVis={wb.nodeVis}
-            onWorldDragStart={(world, sx, sy, base) => {
-              worldDragRef.current = { world, sx, sy, base };
+            onWorldDragStart={(world, sx, sy, base, ev) => {
+              onHandlePointer(ev);
+              if (pinchRef.current || pointersRef.current.size >= 2) return;
+              worldDragRef.current = {
+                world,
+                sx,
+                sy,
+                base,
+                px: ev.clientX,
+                py: ev.clientY,
+                armed: false,
+              };
             }}
           />
           <GroupLayer
@@ -387,8 +678,18 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
             nodes={wb.nodes}
             show={wb.show.groups}
             packVis={wb.nodeVis}
-            onHouseholdDragStart={(gid, sx, sy, base) => {
-              hhDragRef.current = { gid, sx, sy, base };
+            onHouseholdDragStart={(gid, sx, sy, base, ev) => {
+              onHandlePointer(ev);
+              if (pinchRef.current || pointersRef.current.size >= 2) return;
+              hhDragRef.current = {
+                gid,
+                sx,
+                sy,
+                base,
+                px: ev.clientX,
+                py: ev.clientY,
+                armed: false,
+              };
             }}
           />
           <EdgeLayer
@@ -400,10 +701,23 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
             userEdgeIds={userEdgeIds.current}
             isSelLink={wb.isSelLink}
             connectMode={wb.connectMode}
-            onLinkClick={(ids) => wb.selectLink(ids)}
-            onUnionClick={(a, b) => {
+            hitStroke={EDGE_HIT_SCREEN_PX / k}
+            onLinkClick={(ids, ev) => {
+              onHandlePointer(ev);
+              if (pinchRef.current || pointersRef.current.size >= 2) return;
+              wb.selectLink(ids);
+            }}
+            onUnionClick={(a, b, ev) => {
+              onHandlePointer(ev);
+              if (pinchRef.current || pointersRef.current.size >= 2) return;
               if (wb.connectMode) wb.handleConnectUnion(a, b);
-              else wb.selectLink([wb.edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a))?.id ?? '']);
+              else
+                wb.selectLink([
+                  wb.edges.find(
+                    (e) =>
+                      (e.a === a && e.b === b) || (e.a === b && e.b === a),
+                  )?.id ?? '',
+                ]);
             }}
           />
           <g id="lTemp">
@@ -457,6 +771,8 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
                 selected={wb.sel?.type === 'node' && wb.sel.id === n.id}
                 connectHighlight={connHighlight === n.id}
                 hiAges={wb.hiAges}
+                hiSingle={wb.hiSingle}
+                partneredIds={wb.partneredIds}
                 onPointerDown={onNodePointerDown}
               />
             ))}
@@ -464,7 +780,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
         </g>
       </svg>
       {wb.status && (
-        <div id="status" style={{ display: 'block' }}>
+        <div id="status" role="status" aria-live="polite" style={{ display: 'block' }}>
           {wb.status}
         </div>
       )}
@@ -493,9 +809,8 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
         onPickWorld={(world) => {
           const r = svgRef.current?.getBoundingClientRect();
           const lg = legendRef.current?.getBoundingClientRect();
-          // Measured rather than assumed, so the reserved gutter tracks the
-          // legend's real width and offset at any viewport size.
-          const inset = r && lg ? Math.max(r.right - lg.left, 0) : 0;
+          const inset =
+            !compact && r && lg ? Math.max(r.right - lg.left, 0) : 0;
           wb.zoomToWorld(world, r?.width ?? 800, r?.height ?? 600, inset);
         }}
       />
