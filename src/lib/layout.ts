@@ -15,10 +15,12 @@ export const LAYOUT = {
   gapYExtra: 48,
   hhPad: 20,
   hhHeader: 40,
-  hhGap: 36,
-  /** Clears dashed household boxes when linked HH columns sit side-by-side (2×hhPad + 8). */
-  connectedHhGap: 48,
+  hhGap: 28,
+  /** Side-by-side household slots — clears dashed boxes (2×hhPad). */
+  householdGap: 40,
   hhPerRow: 3,
+  /** Household columns inside the catch-all Other world container. */
+  otherHhCols: 7,
   worldRowMaxW: 1600,
   worldCols: 4,
   worldGapX: 64,
@@ -632,7 +634,278 @@ function buildHouseholdComponents(
   return components;
 }
 
-type HHTile = { w: number; h: number; placed: PlacedCard[]; isCluster: boolean; sortKey: string };
+type HHTile = {
+  w: number;
+  h: number;
+  placed: PlacedCard[];
+  isCluster: boolean;
+  sortKey: string;
+  colSpan?: number;
+};
+
+/** Widest generation row → how many tag columns this household occupies. */
+function colSpanFromPlaced(placed: PlacedCard[]): number {
+  if (!placed.length) return 1;
+  const byRow = new Map<number, number>();
+  for (const p of placed) {
+    byRow.set(p.y, (byRow.get(p.y) ?? 0) + 1);
+  }
+  return Math.max(1, ...byRow.values());
+}
+
+/** Pixel width of N tag columns (cards side-by-side). */
+function gridColumnWidth(span: number): number {
+  if (span <= 1) return CARD_MIN_W;
+  return span * CARD_MIN_W + (span - 1) * LAYOUT.gapX;
+}
+
+/** Keep a generation row inside its allocated tag-column band. */
+function pinRowToColumn(
+  placed: PlacedCard[],
+  rowX: number,
+  span: number,
+): PlacedCard[] {
+  if (!placed.length) return placed;
+  const maxW = gridColumnWidth(span);
+  const minX = Math.min(...placed.map((p) => p.x));
+  let dx = rowX - minX;
+  const maxX = Math.max(...placed.map((p) => p.x + p.w));
+  if (maxX + dx > rowX + maxW) dx = rowX + maxW - maxX;
+  if (Math.abs(dx) < 0.5) return placed;
+  return placed.map((p) => ({ ...p, x: Math.round(p.x + dx) }));
+}
+
+/** Keep a generation row inside its allocated tag-column band. */
+function ageTierGenerations(mem: SimNode[]): Map<string, number> {
+  const tiers = [...new Set(mem.map((n) => ageRank(n.age)))].sort(
+    (a, b) => b - a,
+  );
+  const tierToGen = new Map(tiers.map((rank, i) => [rank, i]));
+  const gen = new Map<string, number>();
+  for (const n of mem) gen.set(n.id, tierToGen.get(ageRank(n.age))!);
+  return gen;
+}
+
+function needsAgeGenerations(
+  mem: SimNode[],
+  gen: Map<string, number>,
+): boolean {
+  const vals = mem.map((n) => gen.get(n.id) ?? 0);
+  return mem.length > 1 && Math.min(...vals) === Math.max(...vals);
+}
+
+/** Four same-row sims with no partner pair → 2×2 (span 2, not 4). */
+function splitQuadOtherHouseholds(
+  mem: SimNode[],
+  gen: Map<string, number>,
+  g: HHGraph,
+): Map<string, number> {
+  const out = new Map(gen);
+  const byGen = new Map<number, SimNode[]>();
+  for (const n of mem) {
+    const gi = out.get(n.id) ?? 0;
+    if (!byGen.has(gi)) byGen.set(gi, []);
+    byGen.get(gi)!.push(n);
+  }
+  for (const [gi, group] of byGen) {
+    if (group.length !== 4) continue;
+    const ids = new Set(group.map((n) => n.id));
+    const hasPartner = group.some((n) => {
+      const p = g.partner.get(n.id);
+      return p && ids.has(p);
+    });
+    if (hasPartner) continue;
+    const sorted = [...group].sort(byName);
+    for (const n of sorted.slice(2)) out.set(n.id, gi + 1);
+  }
+  return out;
+}
+
+function groupPlacedByRow(placed: PlacedCard[]): PlacedCard[][] {
+  const byY = new Map<number, PlacedCard[]>();
+  for (const p of placed) {
+    if (!byY.has(p.y)) byY.set(p.y, []);
+    byY.get(p.y)!.push(p);
+  }
+  return [...byY.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, row]) => row);
+}
+
+/**
+ * Other-world household: pedigree rows inside, column span from widest row.
+ * Rows are pinned to the allocated tag-column band before grid packing.
+ */
+function layoutOtherHouseholdTile(
+  mem: SimNode[],
+  edges: Edge[],
+): { placed: PlacedCard[]; w: number; h: number; colSpan: number } {
+  const g = buildHHGraph(mem, edges);
+  const hhIds = new Set(mem.map((n) => n.id));
+  for (const e of edges) {
+    if (e.type !== 'parent' || !hhIds.has(e.b)) continue;
+    if (!g.parents.has(e.b)) g.parents.set(e.b, new Set());
+    g.parents.get(e.b)!.add(e.a);
+  }
+
+  let gen = generationRows(mem, g.parents);
+  alignPartnerGenerationsFromGraph(mem, gen, g.partner);
+  propagateGenerationsFromParents(mem, gen, g.parents);
+  if (needsAgeGenerations(mem, gen)) gen = ageTierGenerations(mem);
+  alignPartnerGenerationsFromGraph(mem, gen, g.partner);
+  propagateGenerationsFromParents(mem, gen, g.parents);
+  gen = splitQuadOtherHouseholds(mem, gen, g);
+
+  const minGen = Math.min(...mem.map((n) => gen.get(n.id) ?? 0));
+  const maxGen = Math.max(...mem.map((n) => gen.get(n.id) ?? 0));
+  const pitchY = rowPitch();
+  const rowX = LAYOUT.hhPad;
+
+  const placed: PlacedCard[] = [];
+  const placedById = new Map<string, PlacedCard>();
+  let cardY = LAYOUT.hhHeader + LAYOUT.hhPad + minGen * pitchY;
+
+  for (let gi = minGen; gi <= maxGen; gi++) {
+    const rowMem = mem.filter((n) => (gen.get(n.id) ?? 0) === gi);
+    if (!rowMem.length) continue;
+    const row = layoutGenerationRow(
+      rowMem,
+      g,
+      placedById,
+      hhIds,
+      rowX,
+      cardY,
+      gi,
+    );
+    for (const p of row.placed) placedById.set(p.id, p);
+    placed.push(...row.placed);
+    cardY += pitchY;
+  }
+
+  const span = colSpanFromPlaced(placed);
+  const pinned: PlacedCard[] = [];
+  for (const row of groupPlacedByRow(placed)) {
+    pinned.push(...pinRowToColumn(row, rowX, span));
+  }
+
+  const { placed: normalized, w, h } = finalizeHouseholdBlock(pinned, 0, 0);
+  return {
+    placed: normalized,
+    w,
+    h,
+    colSpan: Math.min(span, LAYOUT.otherHhCols),
+  };
+}
+
+/** X origin of tag column C in the Other-world grid. */
+function otherTagColX(col: number): number {
+  return col * (CARD_MIN_W + LAYOUT.gapX);
+}
+
+/** Total pixel width of the 7 tag-column grid (incl. box padding). */
+function otherGridWidth(): number {
+  const cols = LAYOUT.otherHhCols;
+  return (
+    cols * CARD_MIN_W +
+    (cols - 1) * LAYOUT.gapX +
+    LAYOUT.hhPad * 2
+  );
+}
+
+/** Tag columns a tile needs in the Other-world masonry grid. */
+function otherTileColSpan(placed: PlacedCard[], w: number): number {
+  const rowSpan = colSpanFromPlaced(placed);
+  const widthSpan = Math.max(
+    1,
+    Math.ceil((w - LAYOUT.hhPad * 2 + LAYOUT.gapX) / (CARD_MIN_W + LAYOUT.gapX)),
+  );
+  return Math.min(LAYOUT.otherHhCols, Math.max(rowSpan, widthSpan));
+}
+
+type OtherTile = {
+  placed: PlacedCard[];
+  w: number;
+  h: number;
+  colSpan: number;
+  sortKey: string;
+  isCluster: boolean;
+};
+
+/**
+ * Other world: linked households cluster tight (40px); everyone else fills
+ * 7 vertical tag columns via shortest-column masonry.
+ */
+function placeOtherWorldGrid(
+  households: [string, SimNode[]][],
+  edges: Edge[],
+): { placed: PlacedCard[]; w: number; h: number } {
+  const gridCols = LAYOUT.otherHhCols;
+  const hhLinks = buildHouseholdLinks(
+    households.flatMap(([, mem]) => mem),
+    edges,
+  );
+  const components = buildHouseholdComponents(households, hhLinks);
+
+  const tiles: OtherTile[] = [];
+  for (const comp of components) {
+    if (comp.length === 1) {
+      const [gid, mem] = comp[0]!;
+      const block = layoutOtherHouseholdTile(mem, edges);
+      tiles.push({
+        placed: block.placed,
+        w: block.w,
+        h: block.h,
+        colSpan: block.colSpan,
+        sortKey: mem[0]?.hh ?? gid,
+        isCluster: false,
+      });
+    } else {
+      const cluster = layoutClusterTile(comp, edges, hhLinks);
+      tiles.push({
+        placed: cluster.placed,
+        w: cluster.w,
+        h: cluster.h,
+        colSpan: otherTileColSpan(cluster.placed, cluster.w),
+        sortKey: cluster.sortKey,
+        isCluster: true,
+      });
+    }
+  }
+
+  tiles.sort((a, b) => {
+    if (a.isCluster !== b.isCluster) return a.isCluster ? -1 : 1;
+    return a.sortKey.localeCompare(b.sortKey);
+  });
+
+  const colHeights = new Array<number>(gridCols).fill(0);
+  const placed: PlacedCard[] = [];
+
+  for (const tile of tiles) {
+    const span = Math.min(tile.colSpan, gridCols);
+    let bestCol = 0;
+    let bestY = Infinity;
+    for (let c = 0; c <= gridCols - span; c++) {
+      const y = Math.max(...colHeights.slice(c, c + span));
+      if (y < bestY) {
+        bestY = y;
+        bestCol = c;
+      }
+    }
+    const oy = bestY > 0 ? bestY + LAYOUT.hhGap : 0;
+    const ox = otherTagColX(bestCol);
+    for (const p of tile.placed) {
+      placed.push({ ...p, x: p.x + ox, y: p.y + oy });
+    }
+    const nextY = oy + tile.h;
+    for (let c = bestCol; c < bestCol + span; c++) colHeights[c] = nextY;
+  }
+
+  return {
+    placed,
+    w: otherGridWidth(),
+    h: Math.max(...colHeights, 0),
+  };
+}
 
 /**
  * Pack linked households in side-by-side columns with synced generation rows.
@@ -663,14 +936,26 @@ function layoutClusterTile(
 
   const placed: PlacedCard[] = [];
   const placedById = new Map<string, PlacedCard>();
+  /** Fixed X band per linked household — columns stay aligned across generation rows. */
+  const colStart = new Map<string, number>();
+  const colSpan = new Map<string, number>();
+  let colX = LAYOUT.hhPad;
+  for (const [gid, hhMem] of ordered) {
+    colStart.set(gid, colX);
+    const block = layoutHousehold(hhMem, edges, 0, 0);
+    const span = colSpanFromPlaced(block.placed);
+    colSpan.set(gid, span);
+    colX += gridColumnWidth(span) + LAYOUT.householdGap;
+  }
   let cardY = LAYOUT.hhHeader + LAYOUT.hhPad + minGen * pitchY;
 
   for (let gi = minGen; gi <= maxGen; gi++) {
-    let rowX = LAYOUT.hhPad;
-    for (const [, hhMem] of ordered) {
+    for (const [gid, hhMem] of ordered) {
       const hhIds = new Set(hhMem.map((n) => n.id));
       const rowMem = hhMem.filter((n) => (gen.get(n.id) ?? 0) === gi);
       if (!rowMem.length) continue;
+      const rowX = colStart.get(gid)!;
+      const span = colSpan.get(gid)!;
       const row = layoutGenerationRow(
         rowMem,
         g,
@@ -680,10 +965,9 @@ function layoutClusterTile(
         cardY,
         gi,
       );
-      for (const p of row.placed) placedById.set(p.id, p);
-      placed.push(...row.placed);
-      const sliceMax = Math.max(...row.placed.map((p) => p.x + p.w));
-      rowX = sliceMax + LAYOUT.hhPad + LAYOUT.connectedHhGap;
+      const pinned = pinRowToColumn(row.placed, rowX, span);
+      for (const p of pinned) placedById.set(p.id, p);
+      placed.push(...pinned);
     }
     cardY += pitchY;
   }
@@ -769,6 +1053,7 @@ function placeHouseholdBento(
   households: [string, SimNode[]][],
   edges: Edge[],
   hhLinks: Map<string, Set<string>>,
+  cols: number = LAYOUT.hhPerRow,
 ): { placed: PlacedCard[]; w: number; h: number } {
   const components = buildHouseholdComponents(households, hhLinks);
   const clusterTiles: HHTile[] = [];
@@ -786,7 +1071,6 @@ function placeHouseholdBento(
   clusterTiles.sort((a, b) => b.w * b.h - a.w * a.h);
   singleTiles.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
-  const cols = LAYOUT.hhPerRow;
   const colHeights = new Array<number>(cols).fill(0);
   const colWidths = new Array<number>(cols).fill(0);
   const assignments: { tile: HHTile; col: number }[] = [];
@@ -913,25 +1197,19 @@ type WorldBlock = { world: string; w: number; h: number; placed: PlacedCard[] };
 export const OTHER_WORLD = 'Other';
 
 function layoutOtherWorld(mem: SimNode[], edges: Edge[]): WorldBlock {
-  const hhLinks = buildHouseholdLinks(mem, edges);
   const byGid = new Map<string, SimNode[]>();
   for (const n of mem) {
     if (!byGid.has(n.gid)) byGid.set(n.gid, []);
     byGid.get(n.gid)!.push(n);
   }
 
-  const minGen = (hhMem: SimNode[]) => householdMinGen(hhMem, edges);
-
-  const households = orderHouseholdsByLinks(
-    [...byGid.entries()],
-    hhLinks,
-    minGen,
+  const households = [...byGid.entries()].sort((a, b) =>
+    (a[1][0]?.hh ?? a[0]).localeCompare(b[1][0]?.hh ?? b[0]),
   );
 
-  const { placed, w: contentW, h: contentH } = placeHouseholdBento(
+  const { placed, w: contentW, h: contentH } = placeOtherWorldGrid(
     households,
     edges,
-    hhLinks,
   );
 
   return {
@@ -999,8 +1277,35 @@ export function layoutBases(
     .filter((b): b is WorldBlock => b !== null);
 
   const bases = placeWorldColumns(worldBlocks);
-  resolveHouseholdBoxOverlaps(nodes, bases);
+  resolveHouseholdBoxOverlaps(nodes, bases, edges);
   return bases;
+}
+
+/** Union-find cluster id per gid from cross-household edges. */
+function linkedClusterByGid(
+  worldNodes: SimNode[],
+  edges: Edge[],
+): Map<string, string> {
+  const idToGid = new Map(worldNodes.map((n) => [n.id, n.gid]));
+  const parent = new Map<string, string>();
+  const find = (g: string): string => {
+    if (!parent.has(g)) parent.set(g, g);
+    if (parent.get(g) !== g) parent.set(g, find(parent.get(g)!));
+    return parent.get(g)!;
+  };
+  for (const n of worldNodes) find(n.gid);
+  for (const e of edges) {
+    const ga = idToGid.get(e.a);
+    const gb = idToGid.get(e.b);
+    if (ga && gb && ga !== gb) {
+      const ra = find(ga);
+      const rb = find(gb);
+      if (ra !== rb) parent.set(ra, rb);
+    }
+  }
+  const out = new Map<string, string>();
+  for (const n of worldNodes) out.set(n.gid, find(n.gid));
+  return out;
 }
 
 type HHBox = { l: number; t: number; r: number; b: number };
@@ -1068,23 +1373,24 @@ function shiftHouseholdY(
 function resolveHouseholdBoxOverlaps(
   nodes: SimNode[],
   bases: Map<string, { x: number; y: number; w: number; h: number }>,
+  edges: Edge[],
 ): void {
-  const gap = LAYOUT.hhGap;
+  const gap = LAYOUT.householdGap;
   const worlds = [...new Set(nodes.map((n) => n.world || OTHER_WORLD))];
   for (const world of worlds) {
-    const gids = [
-      ...new Set(
-        nodes
-          .filter((n) => (n.world || OTHER_WORLD) === world)
-          .map((n) => n.gid),
-      ),
-    ];
+    if (world === OTHER_WORLD) continue;
+    const worldNodes = nodes.filter(
+      (n) => (n.world || OTHER_WORLD) === world,
+    );
+    const cluster = linkedClusterByGid(worldNodes, edges);
+    const gids = [...new Set(worldNodes.map((n) => n.gid))];
     for (let pass = 0; pass < 48; pass++) {
       let moved = false;
       for (let i = 0; i < gids.length; i++) {
         for (let j = i + 1; j < gids.length; j++) {
           const ga = gids[i]!;
           const gb = gids[j]!;
+          if (cluster.get(ga) === cluster.get(gb)) continue;
           const a = householdBox(ga, world, nodes, bases);
           const b = householdBox(gb, world, nodes, bases);
           if (!a || !b || !boxesOverlap(a, b)) continue;
