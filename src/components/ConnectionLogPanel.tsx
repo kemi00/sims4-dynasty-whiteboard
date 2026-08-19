@@ -4,6 +4,7 @@ import { CONNECTION_LOG_PANEL_W } from '../lib/constants.ts';
 import { panelPosition } from '../lib/chrome.ts';
 import { useCompactChrome } from '../hooks/useCompactChrome.ts';
 import {
+  connectionLogRows,
   relDisplay,
   sortConnectionLog,
   type ConnectionLogEntry,
@@ -83,8 +84,8 @@ export function ConnectionLogPanel({
   const compact = useCompactChrome();
   const pos = panelPosition(anchorRect, CONNECTION_LOG_PANEL_W);
   const [newestFirst, setNewestFirst] = useState(true);
-  const sorted = useMemo(
-    () => sortConnectionLog(entries, newestFirst),
+  const rows = useMemo(
+    () => connectionLogRows(sortConnectionLog(entries, newestFirst)),
     [entries, newestFirst],
   );
   if (!pos) return null;
@@ -129,18 +130,30 @@ export function ConnectionLogPanel({
         </p>
       ) : (
         <ul className="connection-log__list">
-          {sorted.map((entry) => {
+          {rows.map((row, i) => {
+            if (row.kind === 'day') {
+              return (
+                <li key={row.key} className="connection-log__day">
+                  <time dateTime={row.day}>{row.day}</time>
+                </li>
+              );
+            }
+            const { entry } = row;
             const selected = entry.edgeIds.length
               ? isSelLink(entry.edgeIds)
               : !!entry.simId && entry.simId === selectedSimId;
+            let stripe = 0;
+            for (let j = i - 1; j >= 0; j--) {
+              if (rows[j]!.kind === 'day') break;
+              stripe++;
+            }
+            const classes = ['connection-log__item'];
+            if (stripe % 2 === 1) classes.push('connection-log__item--alt');
+            if (selected) classes.push('connection-log__item--on');
             return (
-              <li key={entry.id}>
+              <li key={row.key}>
                 <div
-                  className={
-                    selected
-                      ? 'connection-log__item connection-log__item--on'
-                      : 'connection-log__item'
-                  }
+                  className={classes.join(' ')}
                   aria-current={selected ? 'true' : undefined}
                   onClick={() => onPick(entry)}
                 >

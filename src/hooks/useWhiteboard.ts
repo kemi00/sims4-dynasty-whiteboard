@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import seedData from '../data/whiteboard.json';
-import { AGES_H, FOCUS_SIM_K, STATUS_FLASH_MS, UEDIT } from '../lib/constants.ts';
+import { ADDED_HOUSEHOLD, AGES_H, FOCUS_SIM_K, PILL_DROP, PILL_H, STATUS_FLASH_MS, UEDIT } from '../lib/constants.ts';
 import {
   bbox,
   cardOriginAtViewportCenter,
@@ -17,7 +17,7 @@ import {
   rowPitch,
 } from '../lib/layout.ts';
 import { bloodVerts, computeEdgeRenderData, hopD } from '../lib/routing.ts';
-import { buildConnectionLog } from '../lib/connectionLog.ts';
+import { buildConnectionLog, householdPlace, simName } from '../lib/connectionLog.ts';
 import { fileStamp, isUserE, migrateWhiteboardData, nextEidc, partneredIdSet, sanitizeEdges, siblingsShareParents, worldColor } from '../lib/utils.ts';
 import type {
   ConnSrc,
@@ -120,6 +120,14 @@ export function useWhiteboard() {
   } | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [householdMoves, setHouseholdMoves] = useState<HouseholdMove[]>([]);
+  const [infantHouseMenu, setInfantHouseMenu] = useState<{
+    pa: string;
+    pb: string;
+    rx: number;
+    ry: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const eidcRef = useRef(100000);
   const statusFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectModeRef = useRef(connectMode);
@@ -258,6 +266,7 @@ export function useWhiteboard() {
       setConnectModeState(on);
       setConnSrc(null);
       setConnectMenu(null);
+      setInfantHouseMenu(null);
       if (on && sel?.type === 'node' && byid[sel.id]) {
         setConnSrc(sel.id);
         setStatus(
@@ -273,6 +282,7 @@ export function useWhiteboard() {
   const cancelConnect = useCallback(() => {
     setConnSrc(null);
     setConnectMenu(null);
+    setInfantHouseMenu(null);
     setStatus(
       connectMode ? 'Connect: click the FIRST sim' : '',
     );
@@ -375,7 +385,7 @@ export function useWhiteboard() {
         svgWidth,
         svgHeight,
       ) ?? OTHER_WORLD;
-    const hh = '(added)';
+    const hh = ADDED_HOUSEHOLD;
     const gid = `${world}||${hh}`;
     const color = worldColor(world, worlds);
     const neighbour =
@@ -589,14 +599,167 @@ export function useWhiteboard() {
         return next;
       });
       if (nextEdges) freezeAfterEdgeChange([pa, pb, childId], nextEdges);
-      setStatus(
+      flashStatus(
         `Linked ✓ — ${byid[childId]?.first ?? 'Sim'} is now a child of ${byid[pa]?.first ?? ''} ＋ ${byid[pb]?.first ?? ''}. Click a sim for the next link`,
       );
       setConnSrc(null);
       setConnectMenu(null);
     },
-    [byid, cancelConnect, freezeAfterEdgeChange],
+    [byid, cancelConnect, flashStatus, freezeAfterEdgeChange],
   );
+
+  const addInfantOfCouple = useCallback(
+    (pa: string, pb: string, destGid: string, rx: number, ry: number) => {
+      const a = byid[pa];
+      const b = byid[pb];
+      if (!a || !b) return;
+      const host = a.gid === destGid ? a : b.gid === destGid ? b : a;
+      const g = groups.find((x) => x.gid === destGid);
+      const dest = g
+        ? {
+            gid: g.gid,
+            hh: g.hh,
+            world: g.world,
+            nb: g.nb,
+            color: g.color,
+          }
+        : {
+            gid: host.gid,
+            hh: host.hh,
+            world: host.world,
+            nb: host.nb,
+            color: host.color,
+          };
+      const id = 'new' + eidcRef.current++;
+      const infant: SimNode = {
+        id,
+        gid: dest.gid,
+        first: 'New',
+        sur: 'Sim',
+        age: 'Infant',
+        state: 'Sim',
+        gender: '-',
+        hh: dest.hh,
+        world: dest.world,
+        nb: dest.nb,
+        color: dest.color,
+        townie: false,
+        oworld: dest.world,
+        onb: dest.nb,
+        ohh: dest.hh,
+        oplay: 'Resident',
+        pack: '',
+        ox: 0,
+        oy: 0,
+        x: 0,
+        y: 0,
+        w: 0,
+        h: 0,
+        added: true,
+      };
+      const size = measureCard(infant);
+      let x = rx - size.w / 2;
+      let y = ry + PILL_H / 2 + PILL_DROP;
+      const pitch = rowPitch();
+      for (let i = 0; i < nodes.length + 1; i++) {
+        const hit = nodes.some(
+          (o) =>
+            x < o.x + o.w &&
+            x + size.w > o.x &&
+            y < o.y + o.h &&
+            y + size.h > o.y,
+        );
+        if (!hit) break;
+        y += pitch;
+      }
+      const bundleId = 'b' + eidcRef.current++;
+      const createdAt = new Date().toISOString();
+      const nextEdges: Edge[] = [...edges];
+      [pa, pb].forEach((p) => {
+        nextEdges.push({
+          id: 'u' + eidcRef.current++,
+          a: p,
+          b: id,
+          type: 'parent',
+          createdAt,
+          bundleId,
+        });
+      });
+      const nextCore = [...nodesCore, toCore(infant)];
+      const bases = layoutBases(nextCore, worlds, nextEdges);
+      const newBase = bases.get(id);
+      const newOx = newBase ? x - newBase.x : x;
+      const newOy = newBase ? y - newBase.y : y;
+      setNodesCore(
+        nextCore.map((node) => {
+          if (node.id === id) return { ...node, ox: newOx, oy: newOy };
+          const vis = byid[node.id];
+          const base = bases.get(node.id);
+          if (!vis || !base) return node;
+          const ox = vis.x - base.x;
+          const oy = vis.y - base.y;
+          if (ox === (node.ox ?? 0) && oy === (node.oy ?? 0)) return node;
+          return { ...node, ox, oy };
+        }),
+      );
+      setEdges(nextEdges);
+      setSel({ type: 'node', id });
+      setInfantHouseMenu(null);
+      flashStatus(
+        `Linked ✓ — Infant added under ${byid[pa]?.first ?? ''} ＋ ${byid[pb]?.first ?? ''}.`,
+      );
+    },
+    [byid, flashStatus, groups, nodes, nodesCore, worlds, edges],
+  );
+
+  const requestInfantOfCouple = useCallback(
+    (
+      pa: string,
+      pb: string,
+      rx: number,
+      ry: number,
+      menuX: number,
+      menuY: number,
+    ) => {
+      const a = byid[pa];
+      const b = byid[pb];
+      if (!a || !b) return;
+      if (a.gid === b.gid) {
+        addInfantOfCouple(pa, pb, a.gid, rx, ry);
+        return;
+      }
+      setInfantHouseMenu({ pa, pb, rx, ry, x: menuX, y: menuY });
+    },
+    [byid, addInfantOfCouple],
+  );
+
+  const confirmInfantHouse = useCallback(
+    (gid: string) => {
+      if (!infantHouseMenu) return;
+      addInfantOfCouple(
+        infantHouseMenu.pa,
+        infantHouseMenu.pb,
+        gid,
+        infantHouseMenu.rx,
+        infantHouseMenu.ry,
+      );
+    },
+    [infantHouseMenu, addInfantOfCouple],
+  );
+
+  const infantHouseChoices = useMemo(() => {
+    if (!infantHouseMenu) return [];
+    const a = byid[infantHouseMenu.pa];
+    const b = byid[infantHouseMenu.pb];
+    if (!a || !b) return [];
+    const choice = (n: SimNode) => ({
+      gid: n.gid,
+      label: `${simName(n)} — ${householdPlace(n.hh, n.nb, n.world)}`,
+    });
+    const opts = [choice(a)];
+    if (b.gid !== a.gid) opts.push(choice(b));
+    return opts;
+  }, [infantHouseMenu, byid]);
 
   const handleConnectClick = useCallback(
     (n: SimNode, clientX: number, clientY: number, stageRect: DOMRect) => {
@@ -644,10 +807,10 @@ export function useWhiteboard() {
       if (type === 'childof') addEdge(b, a, 'parent');
       else addEdge(a, b, type as Edge['type']);
       setConnectMenu(null);
-      setStatus('Linked ✓ — click a sim for the next link');
+      flashStatus('Linked ✓ — click a sim for the next link');
       setConnSrc(null);
     },
-    [connectMenu, addEdge],
+    [connectMenu, addEdge, flashStatus],
   );
 
   const fit = useCallback((svgWidth: number, svgHeight: number) => {
@@ -1047,6 +1210,11 @@ export function useWhiteboard() {
     setPlayOpen,
     connectMenu,
     setConnectMenu,
+    infantHouseMenu,
+    setInfantHouseMenu,
+    infantHouseChoices,
+    requestInfantOfCouple,
+    confirmInfantHouse,
     logOpen,
     setLogOpen,
     connectionLog,

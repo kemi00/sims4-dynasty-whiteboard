@@ -20,6 +20,7 @@ import { ConnectMenu } from './ConnectMenu.tsx';
 import { EdgeLayer } from './EdgeLayer.tsx';
 import { GroupLayer } from './GroupLayer.tsx';
 import { Hint } from './Hint.tsx';
+import { InfantHouseMenu } from './InfantHouseMenu.tsx';
 import { Legend } from './Legend.tsx';
 import { SimEditor } from './SimEditor.tsx';
 import { SimNodeView } from './SimNode.tsx';
@@ -415,6 +416,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
       connectTapRef.current = true;
       return;
     }
+    if (wb.infantHouseMenu) wb.setInfantHouseMenu(null);
     wb.clearSel();
     panRef.current = {
       x: ev.clientX,
@@ -725,6 +727,19 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
                   )?.id ?? '',
                 ]);
             }}
+            onAddInfant={(u, ev) => {
+              onHandlePointer(ev);
+              if (pinchRef.current || pointersRef.current.size >= 2) return;
+              const sr = stageRef.current?.getBoundingClientRect();
+              wb.requestInfantOfCouple(
+                u.a,
+                u.b,
+                u.rx,
+                u.ry,
+                ev.clientX - (sr?.left ?? 0),
+                ev.clientY - (sr?.top ?? 0),
+              );
+            }}
           />
           <g id="lTemp">
             {tempLine && (
@@ -807,6 +822,15 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
             wb.setConnectMenu(null);
             wb.cancelConnect();
           }}
+        />
+      )}
+      {wb.infantHouseMenu && (
+        <InfantHouseMenu
+          left={wb.infantHouseMenu.x}
+          top={wb.infantHouseMenu.y}
+          options={wb.infantHouseChoices}
+          onPick={wb.confirmInfantHouse}
+          onCancel={() => wb.setInfantHouseMenu(null)}
         />
       )}
       <Legend

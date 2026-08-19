@@ -1,4 +1,4 @@
-import { LINK_LABEL, LINK_MARK } from './constants.ts';
+import { ADDED_HOUSEHOLD, LINK_LABEL, LINK_MARK } from './constants.ts';
 import type { Edge, HouseholdMove, SimNode } from '../types/whiteboard.ts';
 import { isUserE } from './utils.ts';
 
@@ -31,6 +31,42 @@ export function formatLogTime(iso: string | undefined): string | null {
     `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
     ` ${p(d.getHours())}:${p(d.getMinutes())}`
   );
+}
+
+/**
+ * Local calendar day as `yyyy-mm-dd`, same timezone as formatLogTime.
+ * Returns null when the stamp cannot be built — never substitutes "now".
+ */
+export function logDayKey(iso: string | undefined): string | null {
+  const stamped = formatLogTime(iso);
+  if (!stamped) return null;
+  const space = stamped.indexOf(' ');
+  return space === -1 ? stamped : stamped.slice(0, space);
+}
+
+export type ConnectionLogRow =
+  | { kind: 'day'; key: string; day: string }
+  | { kind: 'entry'; key: string; entry: ConnectionLogEntry };
+
+/**
+ * Day dividers for already-sorted display order. A divider is inserted when
+ * the local day changes onto a parseable date. Missing/invalid createdAt
+ * values do not mint a day and do not get a divider against a known day.
+ */
+export function connectionLogRows(
+  entries: ConnectionLogEntry[],
+): ConnectionLogRow[] {
+  const rows: ConnectionLogRow[] = [];
+  let prevDay: string | null | undefined;
+  for (const entry of entries) {
+    const day = logDayKey(entry.createdAt);
+    if (day && day !== prevDay) {
+      rows.push({ kind: 'day', key: `day:${rows.length}:${day}`, day });
+    }
+    rows.push({ kind: 'entry', key: entry.id, entry });
+    prevDay = day;
+  }
+  return rows;
 }
 
 export function simName(n: SimNode): string {
@@ -149,8 +185,24 @@ function coupleChildParts(
 }
 
 function moveParts(sim: SimNode, move: HouseholdMove): LogPart[] {
-  const from = householdPlace(move.fromHh, move.fromNb, move.fromWorld);
+  const spawned = move.fromHh === ADDED_HOUSEHOLD;
+  const from = householdPlace(
+    spawned ? '' : move.fromHh,
+    move.fromNb,
+    move.fromWorld,
+  );
   const to = householdPlace(move.toHh, move.toNb, move.toWorld);
+  if (spawned) {
+    const mid = from
+      ? ` came into ✨existence✨ and moved from ${from}, to `
+      : ' came into ✨existence✨ and moved to ';
+    return [
+      { kind: 'sim', id: sim.id, name: simName(sim) },
+      { kind: 'text', value: mid },
+      { kind: 'text', value: to },
+      { kind: 'text', value: '.' },
+    ];
+  }
   return [
     { kind: 'sim', id: sim.id, name: simName(sim) },
     { kind: 'text', value: ' moved from ' },

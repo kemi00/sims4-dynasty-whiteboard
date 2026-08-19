@@ -87,6 +87,48 @@ function DivorcePill({ x, y, color }: { x: number; y: number; color: string }) {
   );
 }
 
+function AddInfantPlus({
+  x,
+  y,
+  onPointerDown,
+}: {
+  x: number;
+  y: number;
+  onPointerDown: (e: ReactPointerEvent) => void;
+}) {
+  const r = PILL_H / 2;
+  return (
+    <g
+      className="union-add"
+      role="button"
+      aria-label="Add an infant of this couple"
+      style={{ cursor: 'pointer' }}
+      onPointerDown={onPointerDown}
+    >
+      <title>Add an infant of this couple</title>
+      <circle
+        cx={x}
+        cy={y}
+        r={r}
+        fill={UEDIT}
+        stroke="#fff"
+        strokeWidth={1.4}
+      />
+      <text
+        x={x}
+        y={y + 4.5}
+        fontSize={13}
+        fontWeight={700}
+        textAnchor="middle"
+        fill="#fff"
+        style={{ pointerEvents: 'none' }}
+      >
+        ＋
+      </text>
+    </g>
+  );
+}
+
 type Props = {
   blood: BloodPath[];
   bloodVerts: BloodVert[];
@@ -99,6 +141,7 @@ type Props = {
   hitStroke: number;
   onLinkClick: (ids: string[], e: ReactPointerEvent) => void;
   onUnionClick: (a: string, b: string, e: ReactPointerEvent) => void;
+  onAddInfant: (u: UnionRender, e: ReactPointerEvent) => void;
 };
 
 export function EdgeLayer({
@@ -113,6 +156,7 @@ export function EdgeLayer({
   hitStroke,
   onLinkClick,
   onUnionClick,
+  onAddInfant,
 }: Props) {
   return (
     <g id="lEdges">
@@ -181,15 +225,27 @@ export function EdgeLayer({
               strokeLinejoin="round"
               strokeLinecap="round"
             />
-            {u.type === 'divorced' && (
-              <DivorcePill x={u.rx} y={u.ry} color={pc} />
-            )}
-            {u.type === 'romance' && (
-              <HeartPill x={u.rx} y={u.ry} color={pc} />
-            )}
-            {u.type === 'marriage' && (
-              <RingPill x={u.rx} y={u.ry} color={pc} />
-            )}
+            <g
+              className={sq ? 'union-pill union-pill--plus' : 'union-pill'}
+            >
+              {u.type === 'divorced' && (
+                <DivorcePill x={u.rx} y={u.ry} color={pc} />
+              )}
+              {u.type === 'romance' && (
+                <HeartPill x={u.rx} y={u.ry} color={pc} />
+              )}
+              {u.type === 'marriage' && (
+                <RingPill x={u.rx} y={u.ry} color={pc} />
+              )}
+              <AddInfantPlus
+                x={u.rx}
+                y={u.ry + PILL_H}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onAddInfant(u, e);
+                }}
+              />
+            </g>
           </g>
         );
       })}

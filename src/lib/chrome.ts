@@ -51,3 +51,36 @@ export function dropdownPosition(
   }
   return { left, top };
 }
+
+/**
+ * Stage-relative coords for a click-anchored menu. Grows into free space
+ * (flips left / above when the click sits near an edge), then clamps so the
+ * whole box stays inside the stage. `maxWidth` / `maxHeight` are the cap the
+ * caller should apply so a tall menu scrolls instead of clipping.
+ */
+export function fitMenuInStage(
+  preferredLeft: number,
+  preferredTop: number,
+  width: number,
+  height: number,
+  stageWidth: number,
+  stageHeight: number,
+  pad = CHROME_EDGE_PAD_PX,
+): { left: number; top: number; maxWidth: number; maxHeight: number } {
+  const maxWidth = Math.max(0, stageWidth - pad * 2);
+  const maxHeight = Math.max(0, stageHeight - pad * 2);
+  const w = Math.min(Math.max(0, width), maxWidth);
+  const h = Math.min(Math.max(0, height), maxHeight);
+
+  let left = preferredLeft;
+  if (left + w > stageWidth - pad) left = preferredLeft - w;
+  left = Math.min(left, stageWidth - w - pad);
+  left = Math.max(pad, left);
+
+  let top = preferredTop;
+  if (top + h > stageHeight - pad) top = preferredTop - h;
+  top = Math.min(top, stageHeight - h - pad);
+  top = Math.max(pad, top);
+
+  return { left, top, maxWidth, maxHeight };
+}

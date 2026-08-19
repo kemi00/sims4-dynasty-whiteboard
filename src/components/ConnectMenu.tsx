@@ -1,4 +1,4 @@
-import { useCompactChrome } from '../hooks/useCompactChrome.ts';
+import { useFitMenuInStage } from '../hooks/useFitMenuInStage.ts';
 
 type Props = {
   aName: string;
@@ -36,29 +36,28 @@ export function ConnectMenu({
   onConfirm,
   onCancel,
 }: Props) {
-  const compact = useCompactChrome();
+  const { compact, ref, style } = useFitMenuInStage(left, top);
   const options = hideSibling
     ? OPTIONS.filter(([ty]) => ty !== 'sibling')
     : OPTIONS;
   return (
     <div
+      ref={ref}
       id="menu"
       className={compact ? 'menu menu--sheet' : 'menu'}
-      style={
-        compact
-          ? { display: 'block' }
-          : { display: 'block', left, top }
-      }
+      role="dialog"
+      aria-label={`Link ${aName} and ${bName}`}
+      style={style}
     >
       <div style={{ fontSize: 10, color: '#889', padding: '2px 4px' }}>
         {aName} ↔ {bName}
       </div>
       {options.map(([ty, lab]) => (
-        <button key={ty} onClick={() => onConfirm(ty)}>
+        <button key={ty} type="button" onClick={() => onConfirm(ty)}>
           {labelFor(ty, aName, bName, lab)}
         </button>
       ))}
-      <button style={{ color: '#b00' }} onClick={onCancel}>
+      <button type="button" style={{ color: '#b00' }} onClick={onCancel}>
         ✕ cancel
       </button>
     </div>

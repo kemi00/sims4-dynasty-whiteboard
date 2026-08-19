@@ -59,6 +59,8 @@ export function Hint() {
       Romance / Divorced / Parent→Child / Sibling). Links <b>you</b> add show
       in <b style={{ color: '#7c3aed' }}>violet</b>. Two-finger drag pans
       while Connect is on.
+      <br />• Hover or tap a <b>⚭ / ❤ / ⚮</b>, then the <b>+</b>, to add
+      an infant under that couple.
       <br />• Tap a <b>⚭ / ❤</b> connection, then a sim, to make that sim
       the <b>child of both partners</b>.
       <br />• Tap a tag or line, then the <b>trash</b> button to remove it.
