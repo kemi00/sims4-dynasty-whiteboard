@@ -7,6 +7,7 @@ import {
   IdentificationBadge,
   LinkSimple,
   MagnifyingGlass,
+  Scroll,
   Trash,
   TreeStructure,
   UserPlus,
@@ -24,9 +25,17 @@ type Props = {
   gamesBtnRef: RefObject<HTMLButtonElement | null>;
   agesBtnRef: RefObject<HTMLButtonElement | null>;
   playBtnRef: RefObject<HTMLButtonElement | null>;
+  logBtnRef: RefObject<HTMLButtonElement | null>;
 };
 
-export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef, playBtnRef }: Props) {
+export function AppBar({
+  wb,
+  svgRef,
+  gamesBtnRef,
+  agesBtnRef,
+  playBtnRef,
+  logBtnRef,
+}: Props) {
   const compact = useCompactChrome();
   const [searchOpen, setSearchOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -89,19 +98,29 @@ export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef, playBtnRef }: Prop
     setFiltersOpen(false);
     wb.setAgesOpen(false);
     wb.setPlayOpen(false);
+    wb.setLogOpen(false);
     wb.setGamesOpen(!wb.gamesOpen);
   };
   const openPlay = () => {
     setFiltersOpen(false);
     wb.setGamesOpen(false);
     wb.setAgesOpen(false);
+    wb.setLogOpen(false);
     wb.setPlayOpen(!wb.playOpen);
   };
   const openAges = () => {
     setFiltersOpen(false);
     wb.setGamesOpen(false);
     wb.setPlayOpen(false);
+    wb.setLogOpen(false);
     wb.setAgesOpen(!wb.agesOpen);
+  };
+  const openLog = () => {
+    setFiltersOpen(false);
+    wb.setGamesOpen(false);
+    wb.setPlayOpen(false);
+    wb.setAgesOpen(false);
+    wb.setLogOpen(!wb.logOpen);
   };
 
   return (
@@ -140,6 +159,22 @@ export function AppBar({ wb, svgRef, gamesBtnRef, agesBtnRef, playBtnRef }: Prop
         disabled={!wb.sel}
         onClick={wb.deleteSelected}
       />
+      <ToolButton
+        id="btnLog"
+        ref={logBtnRef}
+        icon={Scroll}
+        label={
+          wb.connectionLog.length
+            ? `Links and household moves you added. ${wb.connectionLog.length} on the list.`
+            : 'Links and household moves you added'
+        }
+        pressed={wb.logOpen}
+        count={wb.connectionLog.length}
+        expanded={wb.logOpen}
+        onClick={openLog}
+      >
+        Log
+      </ToolButton>
 
       <span className="appbar__rule" aria-hidden="true" />
 

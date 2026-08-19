@@ -1,6 +1,7 @@
 
 *{box-sizing:border-box}
-html,body,#root{margin:0;height:100%;height:100dvh;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1b2b3a;overflow:hidden}
+html,body,#root{margin:0;height:100%;height:100dvh;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1b2b3a;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,[contenteditable=true]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 #root,#app{display:flex;flex-direction:column;height:100%;min-height:0}
 /* Base for the panels floating over the canvas. Deliberately scoped: the top
    bar owns .tool and must not inherit any of this. */
@@ -37,7 +38,7 @@ html,body,#root{margin:0;height:100%;height:100dvh;font-family:-apple-system,Bli
 }
 
 /* ── top bar ─────────────────────────────────────────────────────────────── */
-.appbar{flex:0 0 auto;height:calc(var(--bar-h) + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:5px;padding:0 10px 0 13px;padding-top:env(safe-area-inset-top,0px);background:var(--chrome);border-bottom:1px solid var(--line);position:relative;z-index:5;flex-wrap:wrap}
+.appbar{flex:0 0 auto;height:calc(var(--bar-h) + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:5px;padding:0 10px 0 13px;padding-top:env(safe-area-inset-top,0px);background:var(--chrome);border-bottom:1px solid var(--line);position:relative;z-index:5;flex-wrap:nowrap}
 .brand{display:flex;align-items:center;gap:9px;flex:0 0 auto}
 .brand .plumbob{width:14px;height:21px;flex:0 0 auto}
 .brand__name{font-size:13px;font-weight:600;letter-spacing:-.1px;color:var(--ink);white-space:nowrap}
@@ -113,16 +114,17 @@ html,body,#root{margin:0;height:100%;height:100dvh;font-family:-apple-system,Bli
 .viewctl__rule{width:1px;height:20px;background:var(--rule);margin:0 3px;flex:0 0 auto}
 .viewctl__zoom{min-width:46px;text-align:center;font-size:11.5px;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums}
 
-/* Narrow windows shed the wordmark, then padding, then labels, so the bar keeps
-   every control on one line. Measured minimum at the last step is 467px. */
-@media (max-width:1100px){ .brand__name{display:none} }
+/* Narrow windows shed the wordmark, then padding, then labels, so the bar stays
+   one row. Re-measured after Log: wordmark off by 1160, labels off by 940.
+   Wrap is reserved for the 640px compact search overlay. */
+@media (max-width:1160px){ .brand__name{display:none} }
 @media (max-width:1000px){
  .appbar{gap:4px;padding:0 8px 0 10px}
  .appbar__rule{margin:0 4px}
  .tool{padding:0 8px;gap:5px}
  .tool[data-tone=primary]{padding:0 10px}
 }
-@media (max-width:820px){
+@media (max-width:940px){
  .tool__label{display:none}
  .tool{width:32px;padding:0;gap:0}
  .tool .tool__count{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 4px}
@@ -171,6 +173,27 @@ svg{width:100%;height:100%;display:block;touch-action:none}
 .gpanel .grow>span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gpanel .grow b{color:#8a7f63;font-weight:600;font-size:11px}
 .gpanel input[type=checkbox]{width:15px;height:15px;accent-color:#1b6cd6;cursor:pointer;flex:0 0 auto}
+/* Keep in sync with CONNECTION_LOG_PANEL_W in src/lib/constants.ts */
+.gpanel.connection-log{width:min(440px, calc(100vw - 24px))}
+.gpanel.connection-log .gph button{width:24px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:50%;background:transparent;color:var(--ink-3);cursor:pointer}
+.gpanel.connection-log .gph button:hover{background:var(--hover);color:var(--ink-2)}
+.gpanel.connection-log .gph button:disabled{opacity:.4;cursor:default}
+.gpanel.connection-log .gph button:disabled:hover{background:transparent;color:var(--ink-3)}
+.gpanel.connection-log .gph button[aria-pressed=true]{color:var(--ink-2);background:var(--hover)}
+.gpanel.connection-log .gph button svg{width:14px;height:14px}
+.connection-log__empty{margin:4px 4px 2px;color:var(--ink-2);line-height:1.45;font-size:12px;font-weight:500}
+.connection-log__list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.gpanel .connection-log__item{white-space:normal;text-align:left;width:100%;display:block;line-height:1.45;padding:8px 9px;border:none;border-radius:8px;background:#faf7f0;color:var(--ink);font:inherit;font-size:12px;font-weight:500;cursor:pointer}
+.gpanel .connection-log__item:hover{background:#f1ece1}
+.gpanel .connection-log__item--on{background:var(--accent-soft);color:var(--accent-strong)}
+.gpanel .connection-log__item--on:hover{background:var(--accent-soft-hi)}
+.connection-log__time{font-weight:400;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.gpanel .connection-log__sim{display:inline;width:auto;height:auto;min-height:0;padding:0;margin:0;border:none;border-radius:0;background:none;color:var(--accent);font:inherit;font-weight:700;line-height:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;white-space:normal;transform:none}
+.gpanel .connection-log__sim:hover{background:none;color:var(--accent-strong)}
+.gpanel .connection-log__sim:active{transform:none}
+.gpanel .connection-log__item--on .connection-log__sim{color:var(--accent-strong)}
+.connection-log__rel{font-weight:700;color:var(--ink)}
+.gpanel .connection-log__item--on .connection-log__rel{color:var(--ink)}
 .node.agedim{opacity:.22}
 .node.agehl>rect:first-of-type{stroke:#f5a300!important;stroke-width:4.5px!important}
 .node.agehl{filter:drop-shadow(0 0 7px rgba(245,163,0,.9))}
@@ -206,12 +229,13 @@ svg{width:100%;height:100%;display:block;touch-action:none}
  .tool{height:44px}
  .tool--icon{width:44px;height:44px}
  .appbar{min-height:calc(var(--bar-h) + env(safe-area-inset-top,0px));height:auto}
- .menu button,.gpanel .grow,.agechips button,.pop button,.pop a{min-height:44px}
+ .menu button,.gpanel .grow,.gpanel .connection-log__item,.agechips button,.pop button,.pop a{min-height:44px}
+ .gpanel .connection-log__sim{min-height:0;padding:0}
 }
 
 /* Keep in sync with CHROME_COMPACT_MAX_PX in src/lib/constants.ts */
 @media (max-width:640px){
- .appbar{height:auto;min-height:calc(var(--bar-h) + env(safe-area-inset-top,0px));row-gap:6px;padding-bottom:6px}
+ .appbar{flex-wrap:wrap;height:auto;min-height:calc(var(--bar-h) + env(safe-area-inset-top,0px));row-gap:6px;padding-bottom:6px}
  .appbar__desktop-filters,.search--bar{display:none}
  .appbar__compact-only{display:flex}
  .search-overlay{display:block;flex:1 0 100%;position:relative;padding:0 2px 2px}

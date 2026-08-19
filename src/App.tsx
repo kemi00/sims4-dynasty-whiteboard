@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import './App.css';
 import { AgesPanel } from './components/AgesPanel.tsx';
 import { AppBar } from './components/AppBar.tsx';
+import { ConnectionLogPanel } from './components/ConnectionLogPanel.tsx';
 import { GamesPanel } from './components/GamesPanel.tsx';
 import { PlayabilityPanel } from './components/PlayabilityPanel.tsx';
 import { WhiteboardStage } from './components/WhiteboardStage.tsx';
@@ -19,9 +20,11 @@ export default function App() {
   const gamesBtnRef = useRef<HTMLButtonElement>(null);
   const agesBtnRef = useRef<HTMLButtonElement>(null);
   const playBtnRef = useRef<HTMLButtonElement>(null);
+  const logBtnRef = useRef<HTMLButtonElement>(null);
   const gamesPanelRef = useRef<HTMLDivElement>(null);
   const agesPanelRef = useRef<HTMLDivElement>(null);
   const playPanelRef = useRef<HTMLDivElement>(null);
+  const logPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -29,6 +32,7 @@ export default function App() {
         if (wb.gamesOpen) wb.setGamesOpen(false);
         else if (wb.playOpen) wb.setPlayOpen(false);
         else if (wb.agesOpen) wb.setAgesOpen(false);
+        else if (wb.logOpen) wb.setLogOpen(false);
         else if (wb.editNodeId) wb.setEditNodeId(null);
         else if (wb.connectMenu) {
           wb.setConnectMenu(null);
@@ -81,10 +85,18 @@ export default function App() {
       ) {
         wb.setAgesOpen(false);
       }
+      if (
+        wb.logOpen &&
+        logPanelRef.current &&
+        !logPanelRef.current.contains(t) &&
+        !logBtnRef.current?.contains(t)
+      ) {
+        wb.setLogOpen(false);
+      }
     };
     document.addEventListener('pointerdown', onPointer, true);
     return () => document.removeEventListener('pointerdown', onPointer, true);
-  }, [wb.gamesOpen, wb.playOpen, wb.agesOpen, wb]);
+  }, [wb.gamesOpen, wb.playOpen, wb.agesOpen, wb.logOpen, wb]);
 
   return (
     <IconContext.Provider value={ICONS}>
@@ -95,6 +107,7 @@ export default function App() {
           gamesBtnRef={gamesBtnRef}
           agesBtnRef={agesBtnRef}
           playBtnRef={playBtnRef}
+          logBtnRef={logBtnRef}
         />
         <WhiteboardStage wb={wb} svgRef={svgRef} stageRef={stageRef} />
         {wb.gamesOpen && (
@@ -141,6 +154,43 @@ export default function App() {
                 wb.setHiAges(new Set());
                 wb.setHiSingle(false);
               }}
+            />
+          </div>
+        )}
+        {wb.logOpen && (
+          <div ref={logPanelRef}>
+            <ConnectionLogPanel
+              entries={wb.connectionLog}
+              anchorRect={
+                logBtnRef.current?.getBoundingClientRect() ?? null
+              }
+              isSelLink={wb.isSelLink}
+              selectedSimId={wb.sel?.type === 'node' ? wb.sel.id : null}
+              onPick={(entry) => {
+                const r = svgRef.current?.getBoundingClientRect();
+                if (entry.simId && !entry.edgeIds.length) {
+                  if (!r) {
+                    wb.selectNode(entry.simId);
+                    return;
+                  }
+                  wb.focusSim(entry.simId, r.width, r.height);
+                  return;
+                }
+                if (!r) {
+                  wb.selectLink(entry.edgeIds);
+                  return;
+                }
+                wb.focusLogEntry(entry.edgeIds, r.width, r.height);
+              }}
+              onFocusSim={(id) => {
+                const r = svgRef.current?.getBoundingClientRect();
+                if (!r) {
+                  wb.selectNode(id);
+                  return;
+                }
+                wb.focusSim(id, r.width, r.height);
+              }}
+              onClose={() => wb.setLogOpen(false)}
             />
           </div>
         )}

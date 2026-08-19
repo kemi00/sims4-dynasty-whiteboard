@@ -337,12 +337,14 @@ export function childRoute(
     return pedigreeDrop(ax, ay, child);
   }
 
-  // Cross-household / same-row: down from anchor, across, up into child top.
-  const lane = Math.max(ay + MINDROP, Math.min(child.y - STUB, ay + 120));
+  // Beside or above the union: drop from the pill, around, stem into the top.
+  const outY = ay + MINDROP;
+  const stub = top - STUB;
   return simplify([
     [ax, ay],
-    [ax, lane],
-    [cx, lane],
+    [ax, outY],
+    [cx, outY],
+    [cx, stub],
     [cx, top],
   ]);
 }
@@ -443,6 +445,68 @@ export function hopD(pts: Point[], verts: BloodVert[], pi: number): string {
     }
   }
   return d;
+}
+
+/** Sibling ⊓: stem up from each top, then a bar or a routed fork. */
+function drawSiblingFork(
+  members: SimNode[],
+  ids: string[],
+  ctx: RoutingContext,
+): BloodPath[] {
+  const { rbands } = ctx;
+  const ex = new Set(members.map((n) => n.id));
+  const cxs = members.map((n) => n.x + n.w / 2);
+  const minx = Math.min(...cxs);
+  const maxx = Math.max(...cxs);
+  const minTop = Math.min(...members.map((n) => n.y));
+  for (let barY = minTop - STUB; barY >= minTop - MINDROP; barY -= 8) {
+    if (!segClear(minx, barY, maxx, barY, rbands, ex)) continue;
+    let ok = true;
+    for (const n of members) {
+      const cx = n.x + n.w / 2;
+      if (!segClear(cx, barY, cx, n.y, rbands, ex)) {
+        ok = false;
+        break;
+      }
+    }
+    if (!ok) continue;
+    const out: BloodPath[] = [{ ids, pts: [[minx, barY], [maxx, barY]] }];
+    for (const n of members) {
+      const cx = n.x + n.w / 2;
+      out.push({ ids, pts: [[cx, barY], [cx, n.y]] });
+    }
+    return out;
+  }
+
+  const ordered = [...members].sort(
+    (a, b) => a.x + a.w / 2 - (b.x + b.w / 2),
+  );
+  const out: BloodPath[] = [];
+  for (let i = 0; i + 1 < ordered.length; i++) {
+    const a = ordered[i]!;
+    const b = ordered[i + 1]!;
+    const ax = a.x + a.w / 2;
+    const bx = b.x + b.w / 2;
+    const aTop: Point = [ax, a.y];
+    const aStub: Point = [ax, a.y - STUB];
+    const bStub: Point = [bx, b.y - STUB];
+    const bTop: Point = [bx, b.y];
+    const mid = orthPath(aStub, bStub, [], ctx);
+    const inner = simplify(mid);
+    const pts: Point[] = [aTop, aStub];
+    for (const p of inner) {
+      const prev = pts[pts.length - 1]!;
+      if (Math.abs(prev[0] - p[0]) < 1 && Math.abs(prev[1] - p[1]) < 1) continue;
+      pts.push(p);
+    }
+    const last = pts[pts.length - 1]!;
+    if (Math.abs(last[0] - bStub[0]) > 1 || Math.abs(last[1] - bStub[1]) > 1) {
+      pts.push(bStub);
+    }
+    pts.push(bTop);
+    out.push({ ids, pts });
+  }
+  return out;
 }
 
 export interface ComputeEdgeRenderInput {
@@ -606,15 +670,7 @@ export function computeEdgeRenderData(
       });
       return;
     }
-    const kn = kids
-      .map((c) => byid[c]!)
-      .filter((n) => {
-        const parentNodes = ps.map((id) => byid[id]).filter(Boolean);
-        if (!parentNodes.length) return true;
-        if (crossHouseholdChild(n, ps, byid)) return true;
-        const parentBottom = Math.max(...parentNodes.map((p) => p.y + p.h));
-        return n.y + n.h > parentBottom + STUB;
-      });
+    const kn = kids.map((c) => byid[c]!);
     if (!kn.length) return;
     const belowK = kn.filter((n) => childBelowAnchor(ay, n));
     const sideK = kn.filter((n) => !childBelowAnchor(ay, n));
@@ -641,11 +697,6 @@ export function computeEdgeRenderData(
       });
     });
     sideK.forEach((n) => {
-      if (!crossHouseholdChild(n, ps, byid)) {
-        const parentNodes = ps.map((id) => byid[id]).filter(Boolean);
-        const parentBottom = Math.max(...parentNodes.map((p) => p.y + p.h));
-        if (n.y + n.h <= parentBottom + STUB) return;
-      }
       BLOOD.push({
         ids: pEB[n.id] || [],
         pts: childRoute(ax, ay, n, exBase.concat([n.id]), ctx),
@@ -687,47 +738,12 @@ export function computeEdgeRenderData(
       if (impliedSiblings(ms, parentsOf) || ms.every((m) => parentBusKids.has(m))) {
         return;
       }
-      const cxs = ms.map((m) => byid[m]!.x + byid[m]!.w / 2);
-      const barY = Math.min(...ms.map((m) => byid[m]!.y)) - 28;
-      const minx = Math.min(...cxs);
-      const maxx = Math.max(...cxs);
       const ids = sibEdges
         .filter((e) => members.includes(e.a) && members.includes(e.b))
         .map((e) => e.id);
-      const ex = new Set(ms);
-      const segs: [Point, Point][] = [[[minx, barY], [maxx, barY]]];
-      ms.forEach((m) => {
-        const n = byid[m]!;
-        const cx = n.x + n.w / 2;
-        segs.push([[cx, barY], [cx, n.y]]);
+      drawSiblingFork(ms.map((m) => byid[m]!), ids, ctx).forEach((p) => {
+        BLOOD.push(p);
       });
-      const ok = segs.every((s) =>
-        segClear(s[0][0], s[0][1], s[1][0], s[1][1], RBANDS, ex),
-      );
-      if (ok) {
-        BLOOD.push({ ids, pts: [[minx, barY], [maxx, barY]] });
-        ms.forEach((m) => {
-          const n = byid[m]!;
-          const cx = n.x + n.w / 2;
-          BLOOD.push({ ids, pts: [[cx, barY], [cx, n.y]] });
-        });
-      } else {
-        for (let i = 0; i + 1 < ms.length; i++) {
-          const a = byid[ms[i]!]!;
-          const b = byid[ms[i + 1]!]!;
-          const ax = a.x + a.w / 2;
-          const bx = b.x + b.w / 2;
-          const r = orthPath(
-            [ax, a.y - STUB],
-            [bx, b.y - STUB],
-            [ms[i]!, ms[i + 1]!],
-            ctx,
-          );
-          r.unshift([ax, a.y]);
-          r.push([bx, b.y]);
-          BLOOD.push({ ids, pts: simplify(r) });
-        }
-      }
     });
   }
 

@@ -1,9 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { COL, UEDIT } from '../lib/constants.ts';
+import { COL, PILL_H, PILL_W, UEDIT } from '../lib/constants.ts';
 import { ptsStr } from '../lib/utils.ts';
 import type { BloodPath, BloodVert, UnionRender } from '../types/whiteboard.ts';
-
-const PILL_H = 24;
 
 /** Opaque capsule that masks the connector where the relationship glyph sits. */
 function PillBg({
@@ -34,7 +32,7 @@ function PillBg({
 function RingPill({ x, y, color }: { x: number; y: number; color: string }) {
   return (
     <>
-      <PillBg x={x} y={y} w={36} color={color} />
+      <PillBg x={x} y={y} w={PILL_W.marriage} color={color} />
       <circle cx={x - 5.5} cy={y} r={6.6} fill="none" stroke={color} strokeWidth={2.3} />
       <circle cx={x + 5.5} cy={y} r={6.6} fill="none" stroke={color} strokeWidth={2.3} />
     </>
@@ -48,7 +46,7 @@ const HEART_D =
 function HeartPill({ x, y, color }: { x: number; y: number; color: string }) {
   return (
     <>
-      <PillBg x={x} y={y} w={36} color={color} />
+      <PillBg x={x} y={y} w={PILL_W.romance} color={color} />
       <path
         d={HEART_D}
         fill={color}
@@ -62,7 +60,7 @@ function HeartPill({ x, y, color }: { x: number; y: number; color: string }) {
 function DivorcePill({ x, y, color }: { x: number; y: number; color: string }) {
   return (
     <>
-      <PillBg x={x} y={y} w={38} color={color} />
+      <PillBg x={x} y={y} w={PILL_W.divorced} color={color} />
       <circle cx={x - 6.5} cy={y} r={6.3} fill="none" stroke={color} strokeWidth={2.2} />
       <circle cx={x + 6.5} cy={y} r={6.3} fill="none" stroke={color} strokeWidth={2.2} />
       {[-2.5, 1.5].map((o) => (

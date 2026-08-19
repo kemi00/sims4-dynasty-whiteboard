@@ -5,6 +5,25 @@ export const COL = {
   custom: '#2b7de0',
 } as const;
 
+/** Same glyphs as Connect / the legend — used in the connection log too. */
+export const LINK_MARK = {
+  marriage: '⚭',
+  romance: '❤',
+  divorced: '\u26AE',
+  parent: '┳',
+  sibling: '⊓',
+  custom: '➖',
+} as const;
+
+export const LINK_LABEL = {
+  marriage: 'married',
+  romance: 'partners',
+  divorced: 'divorced',
+  parent: 'child',
+  sibling: 'sibling',
+  custom: 'linked',
+} as const;
+
 export const OCC: Record<string, string> = {
   Vampire: '🧛',
   Spellcaster: '✨',
@@ -105,8 +124,15 @@ export const MINDROP = 46;
 
 /** Drop line length below a union pill before the parent-child trunk. */
 export const PILL_DROP = 12;
+/** Relationship pill height (rings / heart / divorce capsule). */
+export const PILL_H = 24;
 /** Half-width of the widest relationship pill (the ⚮ capsule is 38 wide). */
 export const PILL_HALF_W = 19;
+export const PILL_W = {
+  marriage: 36,
+  romance: 36,
+  divorced: 38,
+} as const;
 /** Breathing room between a pill edge and the tag edge it sits next to. */
 export const PILL_CLEAR = 4;
 /**
@@ -120,6 +146,9 @@ export const CHROME_COMPACT_MAX_PX = 640;
 
 /** Inset from the viewport edge when clamping floating chrome. */
 export const CHROME_EDGE_PAD_PX = 6;
+
+/** Width of the connection-log panel (sentences need more room than pack lists). */
+export const CONNECTION_LOG_PANEL_W = 440;
 
 /** Gap between a toolbar control and the dropdown that belongs to it. */
 export const CHROME_DROPDOWN_GAP_PX = 6;

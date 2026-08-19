@@ -2,7 +2,9 @@ import {
   ALIGN_TH,
   BAND,
   GRID,
+  PILL_H,
   PILL_HALF_W,
+  PILL_W,
   RGAP,
   SNAP_HYST,
   SNAP_RANGE,
@@ -21,6 +23,7 @@ import type {
   ShowToggles,
   SimNode,
   UnionGeom,
+  UnionRender,
   Viewport,
 } from '../types/whiteboard.ts';
 
@@ -295,6 +298,21 @@ export function viewportWorldRect(
   };
 }
 
+/** Top-left so a card of this size sits centred in the current view. */
+export function cardOriginAtViewportCenter(
+  viewport: Viewport,
+  svgWidth: number,
+  svgHeight: number,
+  cardW: number,
+  cardH: number,
+): { x: number; y: number } {
+  const view = viewportWorldRect(viewport, svgWidth, svgHeight);
+  return {
+    x: (view.l + view.r) / 2 - cardW / 2,
+    y: (view.t + view.b) / 2 - cardH / 2,
+  };
+}
+
 /**
  * World whose frame covers the most of the current view. If nothing overlaps
  * (empty gap / zoomed into void), the closest frame to the view centre wins.
@@ -410,6 +428,21 @@ export function snapHouseholdDelta(
       gy: guideY !== null ? [guideY] : [],
     },
   };
+}
+
+/** True when (wx, wy) is on a ⚭ / ❤ / ⚮ pill. */
+export function unionAtPoint(
+  wx: number,
+  wy: number,
+  unions: UnionRender[],
+): UnionRender | null {
+  for (let i = unions.length - 1; i >= 0; i--) {
+    const u = unions[i]!;
+    const w = PILL_W[u.type];
+    if (Math.abs(wx - u.rx) <= w / 2 && Math.abs(wy - u.ry) <= PILL_H / 2)
+      return u;
+  }
+  return null;
 }
 
 /**

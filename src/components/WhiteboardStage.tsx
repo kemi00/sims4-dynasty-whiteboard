@@ -5,7 +5,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { border, unionGeom, type SnapSticky } from '../lib/geometry.ts';
+import { border, unionAtPoint, unionGeom, type SnapSticky } from '../lib/geometry.ts';
 import {
   CARD_H,
   DRAG_SLOP_PX,
@@ -583,6 +583,12 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
       return;
     }
     if (wb.connectMode) {
+      const [wx, wy] = toWorld(ev.clientX, ev.clientY);
+      const union = unionAtPoint(wx, wy, wb.edgeData.unions);
+      if (union) {
+        wb.handleConnectUnion(union.a, union.b);
+        return;
+      }
       const sr = stageRef.current!.getBoundingClientRect();
       wb.handleConnectClick(n, ev.clientX, ev.clientY, sr);
       return;
@@ -730,6 +736,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
                 stroke="#1b6cd6"
                 strokeWidth={2}
                 strokeDasharray="5 5"
+                pointerEvents="none"
               />
             )}
             {guides && wb.snap && (

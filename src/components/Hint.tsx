@@ -62,9 +62,12 @@ export function Hint() {
       <br />• Tap a <b>⚭ / ❤</b> connection, then a sim, to make that sim
       the <b>child of both partners</b>.
       <br />• Tap a tag or line, then the <b>trash</b> button to remove it.
+      <br />• <b>Log</b> lists every link you added. Deleting a link removes
+      that line.
       <br />• Double-tap or long-press a tag to edit name/age.
-      <br />• <b>Save .json</b> keeps your work and <b>Load</b> brings it back,
-      both under the <b>⋮</b> menu at the top right.
+      <br />• <b>Save .json</b> keeps your work (including the log) and
+      <b>Load</b> brings it back, both under the <b>⋮</b> menu at the top
+      right.
     </div>
   );
 }

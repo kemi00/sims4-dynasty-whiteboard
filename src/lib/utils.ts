@@ -1,9 +1,42 @@
-import type { Edge, Group, Point, SimNode, World } from '../types/whiteboard.ts';
+import type {
+  Edge,
+  Group,
+  HouseholdMove,
+  Point,
+  SimNode,
+  World,
+} from '../types/whiteboard.ts';
 
 export const uKey = (a: string, b: string): string =>
   [a, b].slice().sort().join('|');
 
 export const isUserE = (e: Edge): boolean => String(e.id).charAt(0) === 'u';
+
+/**
+ * Next counter for `u…` / `b…` / `h…` ids. Uses the highest numeric suffix already
+ * present so a loaded save does not collide with new links.
+ */
+export function nextEidc(
+  edges: Edge[],
+  fallback: number,
+  extraIds: string[] = [],
+): number {
+  let max = fallback;
+  const consider = (raw: string | undefined) => {
+    if (!raw) return;
+    const ch = raw.charAt(0);
+    if (ch !== 'u' && ch !== 'b' && ch !== 'h') return;
+    const n = Number(raw.slice(1));
+    if (!Number.isFinite(n) || n < max) return;
+    max = n + 1;
+  };
+  for (const e of edges) {
+    consider(e.id);
+    consider(e.bundleId);
+  }
+  extraIds.forEach(consider);
+  return max;
+}
 
 export const esc = (s: unknown): string =>
   (s == null ? '' : String(s))
@@ -118,6 +151,7 @@ export function migrateWhiteboardData(d: {
   worlds?: World[];
   hiddenPacks?: string[];
   hiddenPlay?: string[];
+  householdMoves?: HouseholdMove[];
 }): typeof d {
   const world = (w: string) => (w === 'Other / Townie' ? 'Other' : w);
   const gid = (g: string) => g.replace(/^Other \/ Townie\|\|/, 'Other||');
@@ -136,6 +170,13 @@ export function migrateWhiteboardData(d: {
     })),
     worlds: d.worlds?.map((w) => ({ ...w, name: world(w.name) })),
     edges: sanitizeEdges(d.edges),
+    householdMoves: d.householdMoves?.map((m) => ({
+      ...m,
+      fromGid: gid(m.fromGid),
+      fromWorld: world(m.fromWorld),
+      toGid: gid(m.toGid),
+      toWorld: world(m.toWorld),
+    })),
   };
 }
 

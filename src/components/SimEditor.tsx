@@ -3,6 +3,17 @@ import { AGES, LIFE_STATES, PLAYABILITY } from '../lib/constants.ts';
 import { useCompactChrome } from '../hooks/useCompactChrome.ts';
 import type { Group, SimNode, World } from '../types/whiteboard.ts';
 
+function pinnedAlpha<T extends string>(items: readonly T[], pin: T): T[] {
+  const rest = items
+    .filter((x) => x !== pin)
+    .slice()
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  return items.includes(pin) ? [pin, ...rest] : rest;
+}
+
+const LIFE_STATE_OPTIONS = pinnedAlpha(LIFE_STATES, 'Sim');
+const PLAYABILITY_OPTIONS = pinnedAlpha(PLAYABILITY, 'Resident');
+
 type Props = {
   node: SimNode;
   worlds: World[];
@@ -69,7 +80,9 @@ export function SimEditor({
         opts.push({ gid: g.gid, hh: g.hh });
       }
     });
-    return opts;
+    return opts.sort((a, b) =>
+      a.hh.localeCompare(b.hh, undefined, { sensitivity: 'base' }),
+    );
   })();
 
   useEffect(() => {
@@ -130,7 +143,7 @@ export function SimEditor({
       </select>
       <label>Life state</label>
       <select value={state} onChange={(e) => setState(e.target.value)}>
-        {LIFE_STATES.map((s) => (
+        {LIFE_STATE_OPTIONS.map((s) => (
           <option key={s} value={s}>
             {s}
           </option>
@@ -141,7 +154,7 @@ export function SimEditor({
       </select>
       <label>Playability</label>
       <select value={oplay} onChange={(e) => setOplay(e.target.value)}>
-        {PLAYABILITY.map((p) => (
+        {PLAYABILITY_OPTIONS.map((p) => (
           <option key={p} value={p}>
             {p}
           </option>

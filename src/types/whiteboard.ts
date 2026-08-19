@@ -45,6 +45,10 @@ export interface Edge {
   a: string;
   b: string;
   type: EdgeType;
+  /** ISO time when the user created this link. Absent on canon and older saves. */
+  createdAt?: string;
+  /** Shared by parent links created together (child of a couple). */
+  bundleId?: string;
 }
 
 export interface Group {
@@ -64,11 +68,29 @@ export interface World {
   color: string;
 }
 
+export interface HouseholdMove {
+  id: string;
+  simId: string;
+  createdAt: string;
+  fromGid: string;
+  fromHh: string;
+  fromWorld: string;
+  fromNb: string;
+  toGid: string;
+  toHh: string;
+  toWorld: string;
+  toNb: string;
+}
+
 export interface WhiteboardData {
   nodes: SimNode[];
   edges: Edge[];
   groups: Group[];
   worlds: World[];
+  /** Snapshot of user-made connection sentences, written on save. */
+  connectionLog?: string[];
+  /** Household moves the user made in the editor. Load trusts this, not the text snapshot. */
+  householdMoves?: HouseholdMove[];
 }
 
 export type Selection =
