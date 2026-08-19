@@ -70,9 +70,9 @@ export function Hint() {
       (logged). Household Age up stays on the house label.
       <br />• <b>Undo</b> (Ctrl/⌘ Z) reverses the last add, link, move,
       age-up, edit, or delete.
-      <br />• Select a sim, then <b>Bloodline</b>, to dim everyone else.
-      <b>Show everyone</b> on the banner (or Esc, or Bloodline again) to
-      leave.
+      <br />• Select a sim, then <b>Filters → Bloodline</b>, to dim everyone
+      else. <b>Show everyone</b> on the banner (or Esc, or Bloodline again)
+      to leave.
       <br />• <b>Log</b> lists every link you added. Deleting a link removes
       that line.
       <br />• Double-tap or long-press a tag to edit name/age.

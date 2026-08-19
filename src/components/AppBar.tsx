@@ -37,18 +37,14 @@ function bloodlineToolLabel(wb: WhiteboardApi): string {
 type Props = {
   wb: WhiteboardApi;
   svgRef: RefObject<SVGSVGElement | null>;
-  gamesBtnRef: RefObject<HTMLButtonElement | null>;
-  agesBtnRef: RefObject<HTMLButtonElement | null>;
-  playBtnRef: RefObject<HTMLButtonElement | null>;
+  filtersBtnRef: RefObject<HTMLButtonElement | null>;
   logBtnRef: RefObject<HTMLButtonElement | null>;
 };
 
 export function AppBar({
   wb,
   svgRef,
-  gamesBtnRef,
-  agesBtnRef,
-  playBtnRef,
+  filtersBtnRef,
   logBtnRef,
 }: Props) {
   const compact = useCompactChrome();
@@ -64,7 +60,9 @@ export function AppBar({
   const hiddenCount = wb.hiddenPacks.size;
   const playHidden = wb.hiddenPlay.size;
   const ageCount = wb.hiAges.size + (wb.hiSingle ? 1 : 0);
-  const filterCount = hiddenCount + playHidden + ageCount;
+  const filterCount =
+    hiddenCount + playHidden + ageCount + (wb.bloodlineId ? 1 : 0);
+  const filterPanelOpen = wb.gamesOpen || wb.playOpen || wb.agesOpen;
 
   const svgSize = () => {
     const r = svgRef.current?.getBoundingClientRect();
@@ -99,7 +97,9 @@ export function AppBar({
       }
     };
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') setFiltersOpen(false);
+      if (ev.key !== 'Escape') return;
+      ev.stopPropagation();
+      setFiltersOpen(false);
     };
     document.addEventListener('pointerdown', onPointer, true);
     document.addEventListener('keydown', onKey, true);
@@ -109,10 +109,26 @@ export function AppBar({
     };
   }, [filtersOpen]);
 
+  const closeFilterPanels = () => {
+    wb.setGamesOpen(false);
+    wb.setPlayOpen(false);
+    wb.setAgesOpen(false);
+  };
+
+  const toggleFilters = () => {
+    if (filterPanelOpen) {
+      closeFilterPanels();
+      setFiltersOpen(false);
+      return;
+    }
+    wb.setLogOpen(false);
+    setFiltersOpen((o) => !o);
+  };
+
   const openGames = () => {
     setFiltersOpen(false);
-    wb.setAgesOpen(false);
     wb.setPlayOpen(false);
+    wb.setAgesOpen(false);
     wb.setLogOpen(false);
     wb.setGamesOpen(!wb.gamesOpen);
   };
@@ -132,14 +148,20 @@ export function AppBar({
   };
   const openLog = () => {
     setFiltersOpen(false);
-    wb.setGamesOpen(false);
-    wb.setPlayOpen(false);
-    wb.setAgesOpen(false);
+    closeFilterPanels();
     wb.setLogOpen(!wb.logOpen);
+  };
+  const onBloodline = () => {
+    wb.toggleBloodline();
+    setFiltersOpen(false);
   };
 
   return (
-    <header className="appbar">
+    <header
+      className={
+        compact && searchOpen ? 'appbar appbar--searching' : 'appbar'
+      }
+    >
       <span className="brand">
         <svg className="plumbob" viewBox="0 0 20 30" aria-hidden="true">
           <path d="M10 0 L4 11 L10 15 L16 11 Z" fill="#7fe04f" />
@@ -181,15 +203,6 @@ export function AppBar({
         onClick={wb.undo}
       />
       <ToolButton
-        icon={UsersThree}
-        label={bloodlineToolLabel(wb)}
-        pressed={!!wb.bloodlineId}
-        disabled={!(wb.bloodlineId || wb.sel?.type === 'node')}
-        onClick={wb.toggleBloodline}
-      >
-        Bloodline
-      </ToolButton>
-      <ToolButton
         id="btnLog"
         ref={logBtnRef}
         icon={Scroll}
@@ -229,58 +242,63 @@ export function AppBar({
         />
       </span>
 
-      <span className="appbar__desktop-filters">
-        <ToolButton
-          id="btnGames"
-          ref={gamesBtnRef}
-          icon={GameController}
-          label={
-            hiddenCount
-              ? `Games and packs. ${hiddenCount} hidden.`
-              : 'Games and packs'
-          }
-          pressed={hiddenCount > 0}
-          count={hiddenCount}
-          expanded={wb.gamesOpen}
-          onClick={openGames}
-        >
-          Games
-        </ToolButton>
-        <ToolButton
-          id="btnPlay"
-          ref={playBtnRef}
-          icon={IdentificationBadge}
-          label={
-            playHidden
-              ? `Playability. ${playHidden} hidden.`
-              : 'Playability'
-          }
-          pressed={playHidden > 0}
-          count={playHidden}
-          expanded={wb.playOpen}
-          onClick={openPlay}
-        >
-          Play
-        </ToolButton>
-        <ToolButton
-          id="btnAges"
-          ref={agesBtnRef}
-          icon={Highlighter}
-          label={
-            ageCount
-              ? `Highlight by age or status. ${ageCount} selected.`
-              : 'Highlight by age or status'
-          }
-          pressed={ageCount > 0}
-          count={ageCount}
-          expanded={wb.agesOpen}
-          onClick={openAges}
-        >
-          Ages
-        </ToolButton>
-      </span>
-
       <span className="appbar__spacer" />
+
+      <div className="overflow" ref={filtersRef}>
+        <ToolButton
+          id="btnFilters"
+          ref={filtersBtnRef}
+          icon={Funnel}
+          label={
+            filterCount
+              ? `Filters. ${filterCount} active.`
+              : 'Filters: bloodline, games, playability, and ages'
+          }
+          pressed={filterCount > 0 || filterPanelOpen || filtersOpen}
+          count={filterCount}
+          expanded={filtersOpen}
+          onClick={toggleFilters}
+        >
+          Filters
+        </ToolButton>
+        {filtersOpen && (
+          <div
+            ref={filtersPopRef}
+            className="pop"
+            role="menu"
+            aria-label="Filters"
+            style={filtersPopStyle}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              aria-pressed={!!wb.bloodlineId}
+              disabled={!(wb.bloodlineId || wb.sel?.type === 'node')}
+              title={bloodlineToolLabel(wb)}
+              onClick={onBloodline}
+            >
+              <UsersThree aria-hidden="true" />
+              Bloodline
+            </button>
+            <span className="pop__rule" aria-hidden="true" />
+            <button type="button" role="menuitem" onClick={openGames}>
+              <GameController aria-hidden="true" />
+              Games
+              {hiddenCount ? ` (${hiddenCount})` : ''}
+            </button>
+            <button type="button" role="menuitem" onClick={openPlay}>
+              <IdentificationBadge aria-hidden="true" />
+              Play
+              {playHidden ? ` (${playHidden})` : ''}
+            </button>
+            <button type="button" role="menuitem" onClick={openAges}>
+              <Highlighter aria-hidden="true" />
+              Ages
+              {ageCount ? ` (${ageCount})` : ''}
+            </button>
+          </div>
+        )}
+      </div>
 
       <span className="search search--bar">
         <MagnifyingGlass className="search__icon" aria-hidden="true" />
@@ -300,41 +318,6 @@ export function AppBar({
           pressed={searchOpen}
           onClick={() => setSearchOpen((o) => !o)}
         />
-        <div className="overflow" ref={filtersRef}>
-          <ToolButton
-            icon={Funnel}
-            label="Filters"
-            pressed={filterCount > 0 || wb.gamesOpen || wb.playOpen || wb.agesOpen}
-            count={filterCount}
-            expanded={filtersOpen}
-            onClick={() => setFiltersOpen((o) => !o)}
-          />
-          {filtersOpen && (
-            <div
-              ref={filtersPopRef}
-              className="pop"
-              role="menu"
-              aria-label="Filters"
-              style={filtersPopStyle}
-            >
-              <button type="button" role="menuitem" onClick={openGames}>
-                <GameController aria-hidden="true" />
-                Games
-                {hiddenCount ? ` (${hiddenCount})` : ''}
-              </button>
-              <button type="button" role="menuitem" onClick={openPlay}>
-                <IdentificationBadge aria-hidden="true" />
-                Play
-                {playHidden ? ` (${playHidden})` : ''}
-              </button>
-              <button type="button" role="menuitem" onClick={openAges}>
-                <Highlighter aria-hidden="true" />
-                Ages
-                {ageCount ? ` (${ageCount})` : ''}
-              </button>
-            </div>
-          )}
-        </div>
       </span>
 
       <OverflowMenu

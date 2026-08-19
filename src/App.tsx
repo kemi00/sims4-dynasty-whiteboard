@@ -17,9 +17,7 @@ export default function App() {
   const wb = useWhiteboard();
   const svgRef = useRef<SVGSVGElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
-  const gamesBtnRef = useRef<HTMLButtonElement>(null);
-  const agesBtnRef = useRef<HTMLButtonElement>(null);
-  const playBtnRef = useRef<HTMLButtonElement>(null);
+  const filtersBtnRef = useRef<HTMLButtonElement>(null);
   const logBtnRef = useRef<HTMLButtonElement>(null);
   const gamesPanelRef = useRef<HTMLDivElement>(null);
   const agesPanelRef = useRef<HTMLDivElement>(null);
@@ -79,7 +77,7 @@ export default function App() {
         wb.gamesOpen &&
         gamesPanelRef.current &&
         !gamesPanelRef.current.contains(t) &&
-        !gamesBtnRef.current?.contains(t)
+        !filtersBtnRef.current?.contains(t)
       ) {
         wb.setGamesOpen(false);
       }
@@ -87,7 +85,7 @@ export default function App() {
         wb.playOpen &&
         playPanelRef.current &&
         !playPanelRef.current.contains(t) &&
-        !playBtnRef.current?.contains(t)
+        !filtersBtnRef.current?.contains(t)
       ) {
         wb.setPlayOpen(false);
       }
@@ -95,7 +93,7 @@ export default function App() {
         wb.agesOpen &&
         agesPanelRef.current &&
         !agesPanelRef.current.contains(t) &&
-        !agesBtnRef.current?.contains(t)
+        !filtersBtnRef.current?.contains(t)
       ) {
         wb.setAgesOpen(false);
       }
@@ -118,9 +116,7 @@ export default function App() {
         <AppBar
           wb={wb}
           svgRef={svgRef}
-          gamesBtnRef={gamesBtnRef}
-          agesBtnRef={agesBtnRef}
-          playBtnRef={playBtnRef}
+          filtersBtnRef={filtersBtnRef}
           logBtnRef={logBtnRef}
         />
         <WhiteboardStage wb={wb} svgRef={svgRef} stageRef={stageRef} />
@@ -131,7 +127,7 @@ export default function App() {
               hiddenPacks={wb.hiddenPacks}
               nodes={wb.nodes}
               anchorRect={
-                gamesBtnRef.current?.getBoundingClientRect() ?? null
+                filtersBtnRef.current?.getBoundingClientRect() ?? null
               }
               onToggle={wb.togglePack}
               onAll={() => wb.setHiddenPacks(new Set())}
@@ -146,7 +142,9 @@ export default function App() {
               playabilities={wb.playabilities}
               hiddenPlay={wb.hiddenPlay}
               nodes={wb.nodes}
-              anchorRect={playBtnRef.current?.getBoundingClientRect() ?? null}
+              anchorRect={
+                filtersBtnRef.current?.getBoundingClientRect() ?? null
+              }
               onToggle={wb.togglePlay}
               onAll={() => wb.setHiddenPlay(new Set())}
               onNone={() => wb.setHiddenPlay(new Set(wb.playabilities))}
@@ -161,7 +159,9 @@ export default function App() {
               hiAges={wb.hiAges}
               hiSingle={wb.hiSingle}
               packVis={wb.nodeVis}
-              anchorRect={agesBtnRef.current?.getBoundingClientRect() ?? null}
+              anchorRect={
+                filtersBtnRef.current?.getBoundingClientRect() ?? null
+              }
               onToggle={wb.toggleAge}
               onToggleSingle={wb.toggleSingle}
               onClear={() => {
