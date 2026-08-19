@@ -1,8 +1,12 @@
+import { AGES_H, DECEASED_STATE } from './constants.ts';
 import type {
+  DeceasedMark,
   Edge,
   Group,
+  HouseholdAgeUp,
   HouseholdMove,
   Point,
+  SimAgeUp,
   SimNode,
   World,
 } from '../types/whiteboard.ts';
@@ -13,7 +17,7 @@ export const uKey = (a: string, b: string): string =>
 export const isUserE = (e: Edge): boolean => String(e.id).charAt(0) === 'u';
 
 /**
- * Next counter for `u…` / `b…` / `h…` ids. Uses the highest numeric suffix already
+ * Next counter for `u…` / `b…` / `h…` / `a…` / `c…` / `d…` ids. Uses the highest numeric suffix already
  * present so a loaded save does not collide with new links.
  */
 export function nextEidc(
@@ -25,7 +29,7 @@ export function nextEidc(
   const consider = (raw: string | undefined) => {
     if (!raw) return;
     const ch = raw.charAt(0);
-    if (ch !== 'u' && ch !== 'b' && ch !== 'h') return;
+    if (ch !== 'u' && ch !== 'b' && ch !== 'h' && ch !== 'a' && ch !== 'c' && ch !== 'd') return;
     const n = Number(raw.slice(1));
     if (!Number.isFinite(n) || n < max) return;
     max = n + 1;
@@ -152,6 +156,9 @@ export function migrateWhiteboardData(d: {
   hiddenPacks?: string[];
   hiddenPlay?: string[];
   householdMoves?: HouseholdMove[];
+  householdAgeUps?: HouseholdAgeUp[];
+  deceasedMarks?: DeceasedMark[];
+  simAgeUps?: SimAgeUp[];
 }): typeof d {
   const world = (w: string) => (w === 'Other / Townie' ? 'Other' : w);
   const gid = (g: string) => g.replace(/^Other \/ Townie\|\|/, 'Other||');
@@ -177,6 +184,11 @@ export function migrateWhiteboardData(d: {
       toGid: gid(m.toGid),
       toWorld: world(m.toWorld),
     })),
+    householdAgeUps: d.householdAgeUps?.map((a) => ({
+      ...a,
+      gid: gid(a.gid),
+      world: world(a.world),
+    })),
   };
 }
 
@@ -187,6 +199,38 @@ export const cssesc = (s: string): string =>
 
 export function isPet(n: SimNode): boolean {
   return !!n.species || n.state === 'Pet';
+}
+
+/** Next rung on AGES_H, or null when the age is unknown, last, or not a sim age. */
+export function nextSimAge(age: string): string | null {
+  const i = (AGES_H as readonly string[]).indexOf(age);
+  if (i < 0 || i >= AGES_H.length - 1) return null;
+  return AGES_H[i + 1] ?? null;
+}
+
+/** True when `to` is a later sim life stage than `from` on AGES_H. */
+export function isLaterSimAge(from: string, to: string): boolean {
+  const a = (AGES_H as readonly string[]).indexOf(from);
+  const b = (AGES_H as readonly string[]).indexOf(to);
+  return a >= 0 && b >= 0 && b > a;
+}
+
+/**
+ * One household age-up step. Elders become Deceased (age stays Elder).
+ * Pets, already-deceased, and ages not on the sim ladder stay put.
+ */
+export function ageUpPatch(n: SimNode): Partial<SimNode> | null {
+  if (isPet(n)) return null;
+  if (n.state === DECEASED_STATE) return null;
+  const last = AGES_H[AGES_H.length - 1];
+  if (last && n.age === last) return { state: DECEASED_STATE };
+  const age = nextSimAge(n.age);
+  if (!age) return null;
+  return { age };
+}
+
+export function canAgeUp(n: SimNode): boolean {
+  return ageUpPatch(n) != null;
 }
 
 /** Current partners: marriage or romance. Divorced alone does not count. */

@@ -1,5 +1,12 @@
-import { ADDED_HOUSEHOLD, LINK_LABEL, LINK_MARK } from './constants.ts';
-import type { Edge, HouseholdMove, SimNode } from '../types/whiteboard.ts';
+import { ADDED_HOUSEHOLD, DECEASED_STATE, LINK_LABEL, LINK_MARK, OCC } from './constants.ts';
+import type {
+  DeceasedMark,
+  Edge,
+  HouseholdAgeUp,
+  HouseholdMove,
+  SimAgeUp,
+  SimNode,
+} from '../types/whiteboard.ts';
 import { isUserE } from './utils.ts';
 
 export type LogPart =
@@ -77,22 +84,36 @@ export function simName(n: SimNode): string {
   return name || n.id;
 }
 
+/** `{neighbourhood}, {world}` — skip a missing neighbourhood. */
+function livingPlace(nb: string, world: string): string {
+  return [nb && nb !== '-' ? nb : '', world && world !== '-' ? world : '']
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
 /** `, from {neighbourhood}, {world}` — skip a missing neighbourhood. */
 function simFromSuffix(n: SimNode): string {
-  const nb = n.nb && n.nb !== '-' ? n.nb : '';
-  const world = n.world && n.world !== '-' ? n.world : '';
-  if (nb && world) return `, from ${nb}, ${world}`;
-  if (world) return `, from ${world}`;
-  if (nb) return `, from ${nb}`;
-  return '';
+  const place = livingPlace(n.nb, n.world);
+  return place ? `, from ${place}` : '';
 }
 
 /** `Hekekia, Sulani` or `Kahananui, Lani St. Taz, Sulani`. */
 export function householdPlace(hh: string, nb: string, world: string): string {
-  return [hh, nb && nb !== '-' ? nb : '', world && world !== '-' ? world : '']
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .join(', ');
+  return [hh.trim(), livingPlace(nb, world)].filter(Boolean).join(', ');
+}
+
+/**
+ * `The {hh} household, from {nb}, {world} aged up.`
+ * Neighbourhood is omitted the same way as simFromSuffix when it is missing or "-".
+ */
+export function householdAgeUpLine(hh: string, nb: string, world: string): string {
+  const name = hh.trim();
+  const place = livingPlace(nb, world);
+  const from = place ? `, from ${place}` : '';
+  if (name) return `The ${name} household${from} aged up.`;
+  if (place) return `${place} aged up.`;
+  return 'aged up.';
 }
 
 function rel(type: keyof typeof LINK_MARK): LogPart {
@@ -184,6 +205,45 @@ function coupleChildParts(
   ];
 }
 
+function deceasedEmoji(): string {
+  return OCC[DECEASED_STATE] ?? '';
+}
+
+function deceasedParts(sim: SimNode, death: DeceasedMark): LogPart[] {
+  const mark = deceasedEmoji();
+  if (death.cause === 'ageUp') {
+    return [
+      { kind: 'sim', id: sim.id, name: simName(sim) },
+      { kind: 'text', value: mark ? ` passed away ${mark}.` : ' passed away.' },
+    ];
+  }
+  const label = mark ? `${mark} ${DECEASED_STATE}` : DECEASED_STATE;
+  return [
+    { kind: 'sim', id: sim.id, name: simName(sim) },
+    { kind: 'text', value: ' became ' },
+    { kind: 'text', value: label },
+    { kind: 'text', value: '.' },
+  ];
+}
+
+function ageUpParts(event: HouseholdAgeUp): LogPart[] {
+  return [{ kind: 'text', value: householdAgeUpLine(event.hh, event.nb, event.world) }];
+}
+
+function simAgeUpParts(sim: SimNode, event: SimAgeUp): LogPart[] {
+  const hh = event.hh.trim();
+  const ofHouse = hh ? ` of the ${hh} household` : '';
+  const place = livingPlace(event.nb, event.world);
+  const from = place ? `, from ${place}` : '';
+  return [
+    { kind: 'sim', id: sim.id, name: simName(sim) },
+    {
+      kind: 'text',
+      value: `${ofHouse}${from} aged up to ${event.age}.`,
+    },
+  ];
+}
+
 function moveParts(sim: SimNode, move: HouseholdMove): LogPart[] {
   const spawned = move.fromHh === ADDED_HOUSEHOLD;
   const from = householdPlace(
@@ -243,13 +303,17 @@ function earliestCreatedAt(edges: Edge[]): string | undefined {
 }
 
 /**
- * User-made links plus household moves. Parent edges that share a bundleId
- * and the same child collapse into a single "had a child … with" sentence.
+ * User-made links plus household moves, age-ups, and editor life-stage
+ * increases. Parent edges that share a bundleId and the same child collapse
+ * into a single "had a child … with" sentence.
  */
 export function buildConnectionLog(
   edges: Edge[],
   byid: Record<string, SimNode>,
   moves: HouseholdMove[] = [],
+  ageUps: HouseholdAgeUp[] = [],
+  deaths: DeceasedMark[] = [],
+  simAgeUps: SimAgeUp[] = [],
 ): ConnectionLogEntry[] {
   const userEdges = edges.filter(isUserE);
   const used = new Set<string>();
@@ -303,6 +367,46 @@ export function buildConnectionLog(
     if (!sim) continue;
     entries.push(
       makeEntry(move.id, [], move.createdAt, moveParts(sim, move), move.simId),
+    );
+  }
+
+  for (const event of ageUps) {
+    entries.push(
+      makeEntry(
+        event.id,
+        [],
+        event.createdAt,
+        ageUpParts(event),
+        event.simIds[0],
+      ),
+    );
+  }
+
+  for (const event of simAgeUps) {
+    const sim = byid[event.simId];
+    if (!sim) continue;
+    entries.push(
+      makeEntry(
+        event.id,
+        [],
+        event.createdAt,
+        simAgeUpParts(sim, event),
+        event.simId,
+      ),
+    );
+  }
+
+  for (const death of deaths) {
+    const sim = byid[death.simId];
+    if (!sim) continue;
+    entries.push(
+      makeEntry(
+        death.id,
+        [],
+        death.createdAt,
+        deceasedParts(sim, death),
+        death.simId,
+      ),
     );
   }
 

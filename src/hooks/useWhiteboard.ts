@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import seedData from '../data/whiteboard.json';
-import { ADDED_HOUSEHOLD, AGES_H, FOCUS_SIM_K, PILL_DROP, PILL_H, STATUS_FLASH_MS, UEDIT } from '../lib/constants.ts';
+import { ADDED_HOUSEHOLD, AGES_H, DECEASED_STATE, FOCUS_SIM_K, PILL_DROP, PILL_H, STATUS_FLASH_MS, UEDIT } from '../lib/constants.ts';
 import {
   bbox,
   cardOriginAtViewportCenter,
@@ -17,15 +17,24 @@ import {
   rowPitch,
 } from '../lib/layout.ts';
 import { bloodVerts, computeEdgeRenderData, hopD } from '../lib/routing.ts';
-import { buildConnectionLog, householdPlace, simName } from '../lib/connectionLog.ts';
-import { fileStamp, isUserE, migrateWhiteboardData, nextEidc, partneredIdSet, sanitizeEdges, siblingsShareParents, worldColor } from '../lib/utils.ts';
+import { lineageIds } from '../lib/bloodline.ts';
+import {
+  buildConnectionLog,
+  householdAgeUpLine,
+  householdPlace,
+  simName,
+} from '../lib/connectionLog.ts';
+import { fileStamp, isUserE, migrateWhiteboardData, nextEidc, ageUpPatch, isLaterSimAge, partneredIdSet, sanitizeEdges, siblingsShareParents, worldColor } from '../lib/utils.ts';
 import type {
   ConnSrc,
+  DeceasedMark,
   Edge,
   Group,
+  HouseholdAgeUp,
   HouseholdMove,
   Selection,
   ShowToggles,
+  SimAgeUp,
   SimNode,
   Viewport,
   WhiteboardData,
@@ -70,6 +79,16 @@ function toCore(n: SimNode): SimNode {
   return { ...rest, ox: rest.ox ?? 0, oy: rest.oy ?? 0, x: 0, y: 0, w: 0, h: 0 };
 }
 
+type BoardSnap = {
+  nodesCore: SimNode[];
+  edges: Edge[];
+  groups: Group[];
+  householdMoves: HouseholdMove[];
+  householdAgeUps: HouseholdAgeUp[];
+  deceasedMarks: DeceasedMark[];
+  simAgeUps: SimAgeUp[];
+};
+
 /** Fields that change packing (generation rows, household tiles, world columns). */
 const LAYOUT_PIN_KEYS: (keyof SimNode)[] = [
   'gid',
@@ -106,6 +125,7 @@ export function useWhiteboard() {
   const [snap, setSnap] = useState(true);
   const [hiAges, setHiAges] = useState<Set<string>>(new Set());
   const [hiSingle, setHiSingle] = useState(false);
+  const [bloodlineId, setBloodlineId] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [fastRoute, setFastRoute] = useState(false);
   const [editNodeId, setEditNodeId] = useState<string | null>(null);
@@ -120,6 +140,9 @@ export function useWhiteboard() {
   } | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [householdMoves, setHouseholdMoves] = useState<HouseholdMove[]>([]);
+  const [householdAgeUps, setHouseholdAgeUps] = useState<HouseholdAgeUp[]>([]);
+  const [deceasedMarks, setDeceasedMarks] = useState<DeceasedMark[]>([]);
+  const [simAgeUps, setSimAgeUps] = useState<SimAgeUp[]>([]);
   const [infantHouseMenu, setInfantHouseMenu] = useState<{
     pa: string;
     pb: string;
@@ -129,6 +152,8 @@ export function useWhiteboard() {
     y: number;
   } | null>(null);
   const eidcRef = useRef(100000);
+  const undoRef = useRef<BoardSnap[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
   const statusFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectModeRef = useRef(connectMode);
   connectModeRef.current = connectMode;
@@ -234,8 +259,21 @@ export function useWhiteboard() {
   const partneredIds = useMemo(() => partneredIdSet(edges), [edges]);
 
   const connectionLog = useMemo(
-    () => buildConnectionLog(edges, byid, householdMoves),
-    [edges, byid, householdMoves],
+    () =>
+      buildConnectionLog(
+        edges,
+        byid,
+        householdMoves,
+        householdAgeUps,
+        deceasedMarks,
+        simAgeUps,
+      ),
+    [edges, byid, householdMoves, householdAgeUps, deceasedMarks, simAgeUps],
+  );
+
+  const bloodlineIds = useMemo(
+    () => (bloodlineId ? lineageIds(bloodlineId, edges) : null),
+    [bloodlineId, edges],
   );
 
   const flashStatus = useCallback((msg: string) => {
@@ -251,6 +289,36 @@ export function useWhiteboard() {
       });
     }, STATUS_FLASH_MS);
   }, []);
+
+  const pushUndo = useCallback(() => {
+    undoRef.current.push({
+      nodesCore: nodesCore.map((n) => ({ ...n })),
+      edges: edges.map((e) => ({ ...e })),
+      groups: groups.map((g) => ({ ...g })),
+      householdMoves: householdMoves.map((m) => ({ ...m })),
+      householdAgeUps: householdAgeUps.map((a) => ({ ...a })),
+      deceasedMarks: deceasedMarks.map((d) => ({ ...d })),
+      simAgeUps: simAgeUps.map((a) => ({ ...a })),
+    });
+    setCanUndo(true);
+  }, [nodesCore, edges, groups, householdMoves, householdAgeUps, deceasedMarks, simAgeUps]);
+
+  const undo = useCallback(() => {
+    const prev = undoRef.current.pop();
+    if (!prev) return;
+    setNodesCore(prev.nodesCore);
+    setEdges(prev.edges);
+    setGroups(prev.groups);
+    setHouseholdMoves(prev.householdMoves);
+    setHouseholdAgeUps(prev.householdAgeUps);
+    setDeceasedMarks(prev.deceasedMarks);
+    setSimAgeUps(prev.simAgeUps);
+    setCanUndo(undoRef.current.length > 0);
+    setSel(null);
+    setEditNodeId(null);
+    setInfantHouseMenu(null);
+    flashStatus('Undone');
+  }, [flashStatus]);
 
   const toggleShow = useCallback(
     (key: keyof ShowToggles) => {
@@ -332,9 +400,10 @@ export function useWhiteboard() {
   );
 
   const addEdge = useCallback((a: string, b: string, type: Edge['type']) => {
+    if (type === 'sibling' && siblingsShareParents(a, b, edges)) return;
     let nextEdges: Edge[] | null = null;
+    pushUndo();
     setEdges((e) => {
-      if (type === 'sibling' && siblingsShareParents(a, b, e)) return e;
       const id = 'u' + eidcRef.current++;
       nextEdges = sanitizeEdges([
         ...e,
@@ -343,10 +412,11 @@ export function useWhiteboard() {
       return nextEdges;
     });
     if (nextEdges) freezeAfterEdgeChange([a, b], nextEdges);
-  }, [freezeAfterEdgeChange]);
+  }, [edges, freezeAfterEdgeChange, pushUndo]);
 
   const deleteSelected = useCallback(() => {
     if (!sel) return;
+    pushUndo();
     if (sel.type === 'node') {
       const nextCore = nodesCore.filter((n) => n.id !== sel.id);
       const nextEdges = edges.filter(
@@ -355,7 +425,10 @@ export function useWhiteboard() {
       pinCardsToCurrentPlaces(nextEdges, nextCore);
       setEdges(nextEdges);
       setHouseholdMoves((ms) => ms.filter((m) => m.simId !== sel.id));
+      setDeceasedMarks((ms) => ms.filter((m) => m.simId !== sel.id));
+      setSimAgeUps((ms) => ms.filter((m) => m.simId !== sel.id));
       if (editNodeId === sel.id) setEditNodeId(null);
+      if (bloodlineId === sel.id) setBloodlineId(null);
     } else if (sel.type === 'link') {
       const nextEdges = edges.filter((e) => !sel.ids.includes(e.id));
       const ends = edges
@@ -368,13 +441,16 @@ export function useWhiteboard() {
   }, [
     sel,
     editNodeId,
+    bloodlineId,
     edges,
     nodesCore,
     pinCardsToCurrentPlaces,
     freezeAfterEdgeChange,
+    pushUndo,
   ]);
 
   const addSim = useCallback((svgWidth: number, svgHeight: number) => {
+    pushUndo();
     const id = 'new' + eidcRef.current++;
     const world =
       dominantWorldInViewport(
@@ -471,7 +547,7 @@ export function useWhiteboard() {
       ];
     });
     setSel({ type: 'node', id });
-  }, [worlds, nodes, nodesCore, groups, nodeVis, viewport, edges, byid]);
+  }, [worlds, nodes, nodesCore, groups, nodeVis, viewport, edges, byid, pushUndo]);
 
   const updateNode = useCallback((id: string, patch: Partial<SimNode>) => {
     const prev = nodesCore.find((n) => n.id === id);
@@ -499,6 +575,36 @@ export function useWhiteboard() {
       });
     if (reflow) pinCardsToCurrentPlaces(edges, apply(nodesCore));
     else setNodesCore(apply);
+    const createdAt = new Date().toISOString();
+    const toAge = patch.age;
+    if (prev && toAge !== undefined && isLaterSimAge(prev.age, toAge)) {
+      setSimAgeUps((ms) => [
+        ...ms,
+        {
+          id: 'c' + eidcRef.current++,
+          simId: id,
+          createdAt,
+          age: toAge,
+          hh: prev.hh,
+          nb: prev.nb,
+          world: prev.world,
+        },
+      ]);
+    }
+    if (
+      prev &&
+      patch.state === DECEASED_STATE &&
+      prev.state !== DECEASED_STATE
+    ) {
+      setDeceasedMarks((ms) => [
+        ...ms,
+        {
+          id: 'd' + eidcRef.current++,
+          simId: id,
+          createdAt,
+        },
+      ]);
+    }
   }, [nodesCore, worlds, edges, pinCardsToCurrentPlaces]);
 
   const moveNodesByGid = useCallback(
@@ -566,6 +672,7 @@ export function useWhiteboard() {
         cancelConnect();
         return;
       }
+      pushUndo();
       let nextEdges: Edge[] | null = null;
       setEdges((es) => {
         const bundleId = 'b' + eidcRef.current++;
@@ -605,7 +712,7 @@ export function useWhiteboard() {
       setConnSrc(null);
       setConnectMenu(null);
     },
-    [byid, cancelConnect, flashStatus, freezeAfterEdgeChange],
+    [byid, cancelConnect, flashStatus, freezeAfterEdgeChange, pushUndo],
   );
 
   const addInfantOfCouple = useCallback(
@@ -613,6 +720,7 @@ export function useWhiteboard() {
       const a = byid[pa];
       const b = byid[pb];
       if (!a || !b) return;
+      pushUndo();
       const host = a.gid === destGid ? a : b.gid === destGid ? b : a;
       const g = groups.find((x) => x.gid === destGid);
       const dest = g
@@ -709,7 +817,7 @@ export function useWhiteboard() {
         `Linked ✓ — Infant added under ${byid[pa]?.first ?? ''} ＋ ${byid[pb]?.first ?? ''}.`,
       );
     },
-    [byid, flashStatus, groups, nodes, nodesCore, worlds, edges],
+    [byid, flashStatus, groups, nodes, nodesCore, worlds, edges, pushUndo],
   );
 
   const requestInfantOfCouple = useCallback(
@@ -929,6 +1037,9 @@ export function useWhiteboard() {
             hiddenPacks: [...hiddenPacks],
             hiddenPlay: [...hiddenPlay],
             householdMoves,
+            householdAgeUps,
+            deceasedMarks,
+            simAgeUps,
             connectionLog: connectionLog.map((entry) => entry.text),
           },
           null,
@@ -941,7 +1052,7 @@ export function useWhiteboard() {
     a.href = URL.createObjectURL(blob);
     a.download = `sims4_family_trees_${fileStamp()}.json`;
     a.click();
-  }, [nodesCore, edges, groups, hiddenPacks, hiddenPlay, householdMoves, connectionLog]);
+  }, [nodesCore, edges, groups, hiddenPacks, hiddenPlay, householdMoves, householdAgeUps, deceasedMarks, simAgeUps, connectionLog]);
 
   const loadJson = useCallback(
     (file: File, svgWidth: number, svgHeight: number) => {
@@ -953,12 +1064,26 @@ export function useWhiteboard() {
           const loadedEdges = sanitizeEdges(d.edges);
           setEdges(loadedEdges);
           const loadedMoves = d.householdMoves ?? [];
+          const loadedAgeUps = d.householdAgeUps ?? [];
+          const loadedDeaths = d.deceasedMarks ?? [];
+          const loadedSimAgeUps = d.simAgeUps ?? [];
           setHouseholdMoves(loadedMoves);
+          setHouseholdAgeUps(loadedAgeUps);
+          setDeceasedMarks(loadedDeaths);
+          setSimAgeUps(loadedSimAgeUps);
           eidcRef.current = nextEidc(
             loadedEdges,
             eidcRef.current,
-            loadedMoves.map((m) => m.id),
+            [
+              ...loadedMoves.map((m) => m.id),
+              ...loadedAgeUps.map((a) => a.id),
+              ...loadedDeaths.map((m) => m.id),
+              ...loadedSimAgeUps.map((a) => a.id),
+            ],
           );
+          undoRef.current = [];
+          setCanUndo(false);
+          setBloodlineId(null);
           if (d.groups) setGroups(d.groups);
           setHiddenPacks(new Set(d.hiddenPacks || []));
           setHiddenPlay(new Set(d.hiddenPlay || []));
@@ -1106,6 +1231,7 @@ export function useWhiteboard() {
         setEditNodeId(null);
         return;
       }
+      pushUndo();
       const patch: Partial<SimNode> = {
         gid: dest.gid,
         hh: dest.hh,
@@ -1148,8 +1274,84 @@ export function useWhiteboard() {
       updateNode(nodeId, patch);
       setEditNodeId(null);
     },
-    [byid, groups, nodes, updateNode, worlds],
+    [byid, groups, nodes, updateNode, worlds, pushUndo],
   );
+
+  const ageUpHousehold = useCallback(
+    (gid: string) => {
+      const members = nodesCore.filter((n) => n.gid === gid);
+      if (!members.length) return;
+      const nextById = new Map<string, Partial<SimNode>>();
+      for (const n of members) {
+        const patch = ageUpPatch(n);
+        if (!patch) continue;
+        nextById.set(n.id, patch);
+      }
+      if (!nextById.size) {
+        flashStatus('No one in this household can age up.');
+        return;
+      }
+      pushUndo();
+      const nextCore = nodesCore.map((n) => {
+        const patch = nextById.get(n.id);
+        return patch ? { ...n, ...patch } : n;
+      });
+      pinCardsToCurrentPlaces(edges, nextCore);
+      const g = groups.find((x) => x.gid === gid);
+      const sample = members[0]!;
+      const hh = g?.hh ?? sample.hh;
+      const nb = g?.nb ?? sample.nb;
+      const world = g?.world ?? sample.world;
+      const createdAt = new Date().toISOString();
+      const diedIds = [...nextById.entries()]
+        .filter(([, patch]) => patch.state === DECEASED_STATE)
+        .map(([id]) => id);
+      setHouseholdAgeUps((es) => [
+        ...es,
+        {
+          id: 'a' + eidcRef.current++,
+          createdAt,
+          gid,
+          hh,
+          nb,
+          world,
+          simIds: [...nextById.keys()],
+        },
+      ]);
+      if (diedIds.length) {
+        setDeceasedMarks((ms) => [
+          ...ms,
+          ...diedIds.map((simId) => ({
+            id: 'd' + eidcRef.current++,
+            simId,
+            createdAt,
+            cause: 'ageUp' as const,
+          })),
+        ]);
+      }
+      flashStatus(householdAgeUpLine(hh, nb, world));
+    },
+    [
+      nodesCore,
+      edges,
+      groups,
+      pinCardsToCurrentPlaces,
+      pushUndo,
+      flashStatus,
+    ],
+  );
+
+  const toggleBloodline = useCallback(() => {
+    if (sel?.type === 'node') {
+      setBloodlineId((cur) => (cur === sel.id ? null : sel.id));
+      return;
+    }
+    if (bloodlineId) {
+      setBloodlineId(null);
+      return;
+    }
+    flashStatus('Select a sim first, then Bloodline.');
+  }, [sel, bloodlineId, flashStatus]);
 
   const togglePlay = useCallback((oplay: string, visible: boolean) => {
     setHiddenPlay((s) => {
@@ -1197,6 +1399,8 @@ export function useWhiteboard() {
     snap,
     hiAges,
     hiSingle,
+    bloodlineId,
+    bloodlineIds,
     partneredIds,
     status,
     fastRoute,
@@ -1241,6 +1445,12 @@ export function useWhiteboard() {
     deleteSelected,
     addSim,
     updateNode,
+    pushUndo,
+    canUndo,
+    undo,
+    ageUpHousehold,
+    toggleBloodline,
+    setBloodlineId,
     moveNodesByGid,
     moveNodesByWorld,
     snapDragPosition,

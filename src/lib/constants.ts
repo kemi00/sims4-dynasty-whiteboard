@@ -55,6 +55,9 @@ export const LIFE_STATES = [
   'Imaginary Friend',
 ] as const;
 
+/** Editor / age-up use this life state for a sim who has died. */
+export const DECEASED_STATE: (typeof LIFE_STATES)[number] = 'Deceased';
+
 export const AGES_H = [
   'Infant',
   'Toddler',

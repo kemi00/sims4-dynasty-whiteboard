@@ -63,7 +63,16 @@ export function Hint() {
       an infant under that couple.
       <br />• Tap a <b>⚭ / ❤</b> connection, then a sim, to make that sim
       the <b>child of both partners</b>.
-      <br />• Tap a tag or line, then the <b>trash</b> button to remove it.
+      <br />• On a household label, <b>Age up</b> moves everyone in that
+      house one life stage (Infant → … → Elder → Deceased). Pets and
+      already-deceased stay.
+      <br />• Change one sim's age in <b>Edit</b> to age them up alone
+      (logged). Household Age up stays on the house label.
+      <br />• <b>Undo</b> (Ctrl/⌘ Z) reverses the last add, link, move,
+      age-up, edit, or delete.
+      <br />• Select a sim, then <b>Bloodline</b>, to dim everyone else.
+      <b>Show everyone</b> on the banner (or Esc, or Bloodline again) to
+      leave.
       <br />• <b>Log</b> lists every link you added. Deleting a link removes
       that line.
       <br />• Double-tap or long-press a tag to edit name/age.

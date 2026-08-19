@@ -44,12 +44,25 @@ export default function App() {
             'Cancelled that link — still in Connect. Click a sim, or Esc again to exit.',
           );
         } else if (wb.connectMode) wb.setConnectMode(false);
+        else if (wb.bloodlineId) wb.setBloodlineId(null);
+      }
+      const typing =
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'SELECT' ||
+        document.activeElement?.tagName === 'TEXTAREA';
+      if (
+        (ev.key === 'z' || ev.key === 'Z') &&
+        (ev.metaKey || ev.ctrlKey) &&
+        !ev.shiftKey &&
+        !typing
+      ) {
+        ev.preventDefault();
+        wb.undo();
       }
       if (
         (ev.key === 'Delete' || ev.key === 'Backspace') &&
         wb.sel &&
-        document.activeElement?.tagName !== 'INPUT' &&
-        document.activeElement?.tagName !== 'SELECT'
+        !typing
       ) {
         ev.preventDefault();
         wb.deleteSelected();

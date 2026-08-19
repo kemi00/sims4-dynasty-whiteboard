@@ -8,13 +8,30 @@ import {
 } from './constants.ts';
 import type { Edge, SimNode, World } from '../types/whiteboard.ts';
 
+/** Name-pill and Age up control height (SVG). */
+const HH_HEADER_PILL_H = 19;
+/** Vertical gap between the name pill and Age up stacked under it. */
+const HH_HEADER_GAP = 6;
+/**
+ * Single-row household header band (name pill + clearance above cards)
+ * before Age up moved onto its own row.
+ */
+const HH_HEADER_NAME_BAND = 40;
+
 /** Spacing rules — row pitch grows with CARD_H automatically. */
 export const LAYOUT = {
   gapX: 72,
   partnerGap: 64,
   gapYExtra: 48,
   hhPad: 20,
-  hhHeader: 40,
+  hhHeaderPillH: HH_HEADER_PILL_H,
+  hhHeaderGap: HH_HEADER_GAP,
+  /**
+   * Space above cards for the name pill plus Age up. Extends the name-row
+   * band by the stacked button row so cards keep the same clearance they
+   * had under the name-only header.
+   */
+  hhHeader: HH_HEADER_NAME_BAND + HH_HEADER_GAP + HH_HEADER_PILL_H,
   hhGap: 28,
   /** Side-by-side household slots — clears dashed boxes (2×hhPad). */
   householdGap: 40,

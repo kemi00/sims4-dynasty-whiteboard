@@ -14,6 +14,7 @@ type Props = {
     base: Record<string, { ox: number; oy: number }>,
     ev: ReactPointerEvent,
   ) => void;
+  onAgeUp: (gid: string) => void;
 };
 
 export function GroupLayer({
@@ -22,6 +23,7 @@ export function GroupLayer({
   show,
   packVis,
   onHouseholdDragStart,
+  onAgeUp,
 }: Props) {
   if (!show) return null;
 
@@ -42,6 +44,8 @@ export function GroupLayer({
         });
         const pad = LAYOUT.hhPad;
         const HDROFF = LAYOUT.hhHeader;
+        const pillH = LAYOUT.hhHeaderPillH;
+        const headerGap = LAYOUT.hhHeaderGap;
         const label = [
           g0.hh,
           g0.nb && g0.nb !== '-' && g0.nb !== g0.world ? g0.nb : null,
@@ -49,13 +53,17 @@ export function GroupLayer({
         ]
           .filter(Boolean)
           .join('  ·  ');
+        const ageLabel = 'Age up';
         const lw = label.length * 6.6 + 30;
+        const ageW = ageLabel.length * 6.6 + 16;
         const boxW = Math.max(x1 - x0 + pad * 2, lw + pad);
+        const headerY = y0 - pad - HDROFF;
+        const ageY = headerY + pillH + headerGap;
         return (
           <g key={g0.gid}>
             <rect
               x={x0 - pad}
-              y={y0 - pad - HDROFF}
+              y={headerY}
               width={boxW}
               height={y1 - y0 + pad * 2 + HDROFF}
               rx={14}
@@ -88,9 +96,9 @@ export function GroupLayer({
             >
               <rect
                 x={x0 - pad}
-                y={y0 - pad - HDROFF}
+                y={headerY}
                 width={lw}
-                height={19}
+                height={pillH}
                 rx={8}
                 fill={g0.color + '22'}
                 stroke={g0.color + '55'}
@@ -98,7 +106,7 @@ export function GroupLayer({
               />
               <text
                 x={x0 - pad + 8}
-                y={y0 - pad - HDROFF + 14}
+                y={headerY + 14}
                 fontSize={12}
                 fill={g0.color + '99'}
               >
@@ -106,12 +114,44 @@ export function GroupLayer({
               </text>
               <text
                 x={x0 - pad + 22}
-                y={y0 - pad - HDROFF + 13}
+                y={headerY + 13}
                 fontSize={12}
                 fontWeight={700}
                 fill={g0.color}
               >
                 {label}
+              </text>
+            </g>
+            <g
+              className="hh-ageup"
+              role="button"
+              aria-label={`Age up ${g0.hh}`}
+              style={{ cursor: 'pointer' }}
+              onPointerDown={(ev) => {
+                ev.stopPropagation();
+                onAgeUp(g0.gid);
+              }}
+            >
+              <title>Age up this household</title>
+              <rect
+                x={x0 - pad}
+                y={ageY}
+                width={ageW}
+                height={pillH}
+                rx={8}
+                fill={g0.color}
+                stroke={g0.color}
+                strokeWidth={1}
+              />
+              <text
+                x={x0 - pad + ageW / 2}
+                y={ageY + 13}
+                fontSize={11}
+                fontWeight={700}
+                textAnchor="middle"
+                fill="#fff"
+              >
+                {ageLabel}
               </text>
             </g>
           </g>

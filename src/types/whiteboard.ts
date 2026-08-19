@@ -82,6 +82,37 @@ export interface HouseholdMove {
   toNb: string;
 }
 
+export interface DeceasedMark {
+  id: string;
+  simId: string;
+  createdAt: string;
+  /** Set when the sim died on a household age-up. Omitted for editor-set deceased. */
+  cause?: 'ageUp';
+}
+
+/** Editor changed this sim to a later life stage on AGES_H. */
+export interface SimAgeUp {
+  id: string;
+  simId: string;
+  createdAt: string;
+  /** Life stage after the edit. */
+  age: string;
+  hh: string;
+  nb: string;
+  world: string;
+}
+
+export interface HouseholdAgeUp {
+  id: string;
+  createdAt: string;
+  gid: string;
+  hh: string;
+  nb: string;
+  world: string;
+  /** Sims whose age actually changed. */
+  simIds: string[];
+}
+
 export interface WhiteboardData {
   nodes: SimNode[];
   edges: Edge[];
@@ -91,6 +122,12 @@ export interface WhiteboardData {
   connectionLog?: string[];
   /** Household moves the user made in the editor. Load trusts this, not the text snapshot. */
   householdMoves?: HouseholdMove[];
+  /** Household age-up events. Load trusts this, not the text snapshot. */
+  householdAgeUps?: HouseholdAgeUp[];
+  /** Sims marked Deceased in the editor or by household age-up. Load trusts this, not the text snapshot. */
+  deceasedMarks?: DeceasedMark[];
+  /** Editor life-stage increases. Load trusts this, not the text snapshot. */
+  simAgeUps?: SimAgeUp[];
 }
 
 export type Selection =

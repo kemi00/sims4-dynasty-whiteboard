@@ -11,6 +11,7 @@ type Props = {
   hiAges: Set<string>;
   hiSingle: boolean;
   partneredIds: Set<string>;
+  bloodlineIds: Set<string> | null;
   onPointerDown: (e: React.PointerEvent, n: SimNode) => void;
 };
 
@@ -21,6 +22,7 @@ export const SimNodeView = memo(function SimNodeView({
   hiAges,
   hiSingle,
   partneredIds,
+  bloodlineIds,
   onPointerDown,
 }: Props) {
   const added = !!n.added;
@@ -33,11 +35,11 @@ export const SimNodeView = memo(function SimNodeView({
       : null;
   const hasBadge = !!(speciesBadge || stateBadge);
   const highlighting = hiAges.size > 0 || hiSingle;
-  const ageClass = highlighting
-    ? isHighlightMatch(n, hiAges, hiSingle, partneredIds)
-      ? 'agehl'
-      : 'agedim'
-    : '';
+  const ageMatch =
+    !highlighting || isHighlightMatch(n, hiAges, hiSingle, partneredIds);
+  const bloodMatch = !bloodlineIds || bloodlineIds.has(n.id);
+  const dim = (highlighting || !!bloodlineIds) && !(ageMatch && bloodMatch);
+  const ageClass = highlighting && ageMatch && bloodMatch ? 'agehl' : dim ? 'agedim' : '';
   const detail = cardDetailLine(n);
   const h = n.h || CARD_H;
 

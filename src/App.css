@@ -144,6 +144,11 @@ svg{width:100%;height:100%;display:block;touch-action:none}
 #hintIcon svg{width:18px;height:18px}
 #hintIcon:hover{background:var(--hover);color:var(--ink)}
 #status{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:6px 13px;border-radius:999px;font-size:12px;font-weight:600;box-shadow:var(--lift);display:none;max-width:min(520px, calc(100% - 24px));text-align:center;line-height:1.35;z-index:8}
+.bloodline-banner{position:absolute;left:50%;top:48px;transform:translateX(-50%);z-index:7;pointer-events:auto;display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;max-width:min(520px, calc(100% - 24px));padding:8px 10px 8px 13px;border:1px solid var(--line);border-radius:var(--r-surface);background:var(--chrome);color:var(--ink);font-size:12px;font-weight:600;line-height:1.35;box-shadow:var(--lift)}
+.bloodline-banner p{margin:0;flex:1 1 12em;min-width:0}
+.bloodline-banner button{flex:0 0 auto;height:28px;padding:0 11px;margin-left:auto;border:1px solid transparent;border-radius:var(--r-control);background:var(--accent);color:#fff;font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.bloodline-banner button:hover{background:var(--accent-strong)}
+.bloodline-banner button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-ring)}
 /* Height is capped so a long legend never reaches the floating view controls. */
 #legend{position:absolute;right:12px;top:12px;background:#fffdf8f2;border:1px solid var(--line);border-radius:var(--r-surface);padding:8px 10px;font-size:10px;max-height:calc(100% - 84px);overflow:auto;overscroll-behavior:contain;box-shadow:var(--lift);width:150px}
 #legend h3{margin:0 0 4px;font-size:9px;letter-spacing:.4px;text-transform:uppercase;color:#8a7f63}
@@ -155,6 +160,9 @@ svg{width:100%;height:100%;display:block;touch-action:none}
 .lg--world:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
 /* Faded rather than hidden, so the colour key stays readable as a reference. */
 .lg--world:disabled{opacity:.4;cursor:default}
+.hhandle{cursor:grab}
+.hh-ageup{cursor:pointer}
+.hh-ageup:hover rect{filter:brightness(1.12)}
 .node rect{cursor:grab}
 .node.sel>rect:first-of-type{stroke:#1b6cd6!important;stroke-width:4.5px!important;fill:#e9f2ff!important}
 .node.sel{filter:drop-shadow(0 0 0 #1b6cd6) drop-shadow(0 0 7px rgba(27,108,214,.9))}

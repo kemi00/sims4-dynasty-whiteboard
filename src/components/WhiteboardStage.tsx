@@ -16,6 +16,7 @@ import { isUserE, siblingsShareParents } from '../lib/utils.ts';
 import type { WhiteboardApi } from '../hooks/useWhiteboard.ts';
 import { useCompactChrome } from '../hooks/useCompactChrome.ts';
 import type { SimNode } from '../types/whiteboard.ts';
+import { BloodlineBanner } from './BloodlineBanner.tsx';
 import { ConnectMenu } from './ConnectMenu.tsx';
 import { EdgeLayer } from './EdgeLayer.tsx';
 import { GroupLayer } from './GroupLayer.tsx';
@@ -34,7 +35,8 @@ type Props = {
 };
 
 /** Chrome on #stage that owns its own wheel (scroll), not board zoom. */
-const STAGE_WHEEL_SCROLL_SEL = '#legend, .legend-chip, .editor, .menu';
+const STAGE_WHEEL_SCROLL_SEL =
+  '#legend, .legend-chip, .editor, .menu, .bloodline-banner';
 
 export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
   const compact = useCompactChrome();
@@ -204,7 +206,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
     const el = stageRef.current;
     if (!el) return;
     const chromeSel =
-      '.viewctl, #legend, #hint, #hintIcon, .editor, .menu, #status, .legend-chip';
+      '.viewctl, #legend, #hint, #hintIcon, .editor, .menu, #status, .legend-chip, .bloodline-banner';
     const onTouchStart = (ev: TouchEvent) => {
       const t = ev.target as Element | null;
       if (t?.closest?.(chromeSel)) return;
@@ -409,6 +411,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
       t.closest('.node') ||
       t.closest('.edge') ||
       t.closest('.hhandle') ||
+      t.closest('.hh-ageup') ||
       t.closest('.whandle')
     )
       return;
@@ -699,6 +702,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
                 armed: false,
               };
             }}
+            onAgeUp={(gid) => wb.ageUpHousehold(gid)}
           />
           <EdgeLayer
             blood={wb.edgeData.blood}
@@ -795,6 +799,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
                 hiAges={wb.hiAges}
                 hiSingle={wb.hiSingle}
                 partneredIds={wb.partneredIds}
+                bloodlineIds={wb.bloodlineIds}
                 onPointerDown={onNodePointerDown}
               />
             ))}
@@ -805,6 +810,12 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
         <div id="status" role="status" aria-live="polite" style={{ display: 'block' }}>
           {wb.status}
         </div>
+      )}
+      {wb.bloodlineId && (
+        <BloodlineBanner
+          node={wb.byid[wb.bloodlineId]}
+          onShowEveryone={() => wb.setBloodlineId(null)}
+        />
       )}
       {menu && (
         <ConnectMenu
@@ -858,6 +869,7 @@ export function WhiteboardStage({ wb, svgRef, stageRef }: Props) {
           editorRef={editorRef}
           onLayout={positionEditor}
           onSave={(patch) => {
+            wb.pushUndo();
             wb.updateNode(editNode.id, patch);
             wb.setEditNodeId(null);
           }}

@@ -7,17 +7,32 @@ import {
   IdentificationBadge,
   LinkSimple,
   MagnifyingGlass,
+  ArrowCounterClockwise,
   Scroll,
   Trash,
   TreeStructure,
   UserPlus,
+  UsersThree,
 } from '@phosphor-icons/react';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useCompactChrome } from '../hooks/useCompactChrome.ts';
 import { useDropdownPosition } from '../hooks/useDropdownPosition.ts';
 import type { WhiteboardApi } from '../hooks/useWhiteboard.ts';
+import { simName } from '../lib/connectionLog.ts';
 import { OverflowMenu } from './OverflowMenu.tsx';
 import { ToolButton } from './ToolButton.tsx';
+
+function bloodlineToolLabel(wb: WhiteboardApi): string {
+  if (wb.bloodlineId) {
+    const node = wb.byid[wb.bloodlineId];
+    const name = node ? simName(node) : 'this sim';
+    return `Showing ${name}'s bloodline. Click to show everyone.`;
+  }
+  if (wb.sel?.type === 'node') {
+    return 'Dim everyone who is not an ancestor or descendant of the selected sim.';
+  }
+  return 'Select a sim, then Bloodline, to dim everyone outside their ancestors and descendants.';
+}
 
 type Props = {
   wb: WhiteboardApi;
@@ -159,6 +174,21 @@ export function AppBar({
         disabled={!wb.sel}
         onClick={wb.deleteSelected}
       />
+      <ToolButton
+        icon={ArrowCounterClockwise}
+        label="Undo the last change (Ctrl/⌘ Z)"
+        disabled={!wb.canUndo}
+        onClick={wb.undo}
+      />
+      <ToolButton
+        icon={UsersThree}
+        label={bloodlineToolLabel(wb)}
+        pressed={!!wb.bloodlineId}
+        disabled={!(wb.bloodlineId || wb.sel?.type === 'node')}
+        onClick={wb.toggleBloodline}
+      >
+        Bloodline
+      </ToolButton>
       <ToolButton
         id="btnLog"
         ref={logBtnRef}
