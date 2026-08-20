@@ -128,6 +128,16 @@ export interface WhiteboardData {
   deceasedMarks?: DeceasedMark[];
   /** Editor life-stage increases. Load trusts this, not the text snapshot. */
   simAgeUps?: SimAgeUp[];
+  /** Pack names hidden by the Games filter. */
+  hiddenPacks?: string[];
+  /** Origin-playability values hidden by the Play filter. */
+  hiddenPlay?: string[];
+  /** Age and pet-species chips highlighted by the Ages filter. */
+  hiAges?: string[];
+  /** Single-sims chip from the Ages filter. */
+  hiSingle?: boolean;
+  /** Sim whose ancestors and descendants stay undimmed. */
+  bloodlineId?: string | null;
 }
 
 export type Selection =

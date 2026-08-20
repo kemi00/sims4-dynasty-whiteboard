@@ -1036,6 +1036,9 @@ export function useWhiteboard() {
             groups,
             hiddenPacks: [...hiddenPacks],
             hiddenPlay: [...hiddenPlay],
+            hiAges: [...hiAges],
+            hiSingle,
+            bloodlineId,
             householdMoves,
             householdAgeUps,
             deceasedMarks,
@@ -1052,7 +1055,7 @@ export function useWhiteboard() {
     a.href = URL.createObjectURL(blob);
     a.download = `sims4_family_trees_${fileStamp()}.json`;
     a.click();
-  }, [nodesCore, edges, groups, hiddenPacks, hiddenPlay, householdMoves, householdAgeUps, deceasedMarks, simAgeUps, connectionLog]);
+  }, [nodesCore, edges, groups, hiddenPacks, hiddenPlay, hiAges, hiSingle, bloodlineId, householdMoves, householdAgeUps, deceasedMarks, simAgeUps, connectionLog]);
 
   const loadJson = useCallback(
     (file: File, svgWidth: number, svgHeight: number) => {
@@ -1083,10 +1086,17 @@ export function useWhiteboard() {
           );
           undoRef.current = [];
           setCanUndo(false);
-          setBloodlineId(null);
           if (d.groups) setGroups(d.groups);
           setHiddenPacks(new Set(d.hiddenPacks || []));
           setHiddenPlay(new Set(d.hiddenPlay || []));
+          setHiAges(new Set(d.hiAges || []));
+          setHiSingle(!!d.hiSingle);
+          const loadedIds = new Set((d.nodes as SimNode[]).map((n) => n.id));
+          setBloodlineId(
+            d.bloodlineId && loadedIds.has(d.bloodlineId)
+              ? d.bloodlineId
+              : null,
+          );
           setSel(null);
           setEditNodeId(null);
           setTimeout(() => fit(svgWidth, svgHeight), 0);

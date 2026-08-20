@@ -155,6 +155,9 @@ export function migrateWhiteboardData(d: {
   worlds?: World[];
   hiddenPacks?: string[];
   hiddenPlay?: string[];
+  hiAges?: string[];
+  hiSingle?: boolean;
+  bloodlineId?: string | null;
   householdMoves?: HouseholdMove[];
   householdAgeUps?: HouseholdAgeUp[];
   deceasedMarks?: DeceasedMark[];

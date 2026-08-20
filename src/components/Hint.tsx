@@ -76,9 +76,9 @@ export function Hint() {
       <br />• <b>Log</b> lists every link you added. Deleting a link removes
       that line.
       <br />• Double-tap or long-press a tag to edit name/age.
-      <br />• <b>Save .json</b> keeps your work (including the log) and
-      <b>Load</b> brings it back, both under the <b>⋮</b> menu at the top
-      right.
+      <br />• <b>Save .json</b> keeps your work (including the log and
+      filters) and <b>Load</b> brings it back, both under the <b>⋮</b> menu
+      at the top right.
     </div>
   );
 }
