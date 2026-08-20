@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react';
-import { AGES, LIFE_STATES, PLAYABILITY } from '../lib/constants.ts';
+import { AGES, GENDERS, LIFE_STATES, PLAYABILITY } from '../lib/constants.ts';
 import { useCompactChrome } from '../hooks/useCompactChrome.ts';
 import type { Group, SimNode, World } from '../types/whiteboard.ts';
 
@@ -26,6 +26,7 @@ type Props = {
     first: string;
     sur: string;
     age: string;
+    gender: string;
     state: string;
     oplay: string;
   }) => void;
@@ -50,6 +51,7 @@ export function SimEditor({
   const compact = useCompactChrome();
   const [name, setName] = useState(`${n.first} ${n.sur}`);
   const [age, setAge] = useState(n.age);
+  const [gender, setGender] = useState(n.gender);
   const [state, setState] = useState(n.state || 'Sim');
   const [oplay, setOplay] = useState(n.oplay || 'Resident');
   const [moveOpen, setMoveOpen] = useState(false);
@@ -141,6 +143,17 @@ export function SimEditor({
           <option value={age}>{age}</option>
         )}
       </select>
+      <label>Gender</label>
+      <select value={gender} onChange={(e) => setGender(e.target.value)}>
+        {GENDERS.map((g) => (
+          <option key={g} value={g}>
+            {g}
+          </option>
+        ))}
+        {!GENDERS.includes(gender as (typeof GENDERS)[number]) && (
+          <option value={gender}>{gender}</option>
+        )}
+      </select>
       <label>Life state</label>
       <select value={state} onChange={(e) => setState(e.target.value)}>
         {LIFE_STATE_OPTIONS.map((s) => (
@@ -224,7 +237,7 @@ export function SimEditor({
             const parts = name.trim().split(' ');
             const first = parts.shift() || name;
             const sur = parts.join(' ');
-            onSave({ first, sur, age, state, oplay });
+            onSave({ first, sur, age, gender, state, oplay });
           }}
         >
           Save

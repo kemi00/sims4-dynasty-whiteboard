@@ -103,6 +103,17 @@ export const SPECIES: Record<string, string> = {
 /** Pet species for the highlight panel — order matches SPECIES. */
 export const SPECIES_H = ['Cat', 'Dog', 'Horse'] as const;
 
+/** Gender values from the premade sims spreadsheet. */
+export const GENDERS = [
+  'Female',
+  'Male',
+  'Non-Binary',
+  'Variable',
+] as const;
+
+/** Genders assigned when the user adds a sim. */
+export const NEW_SIM_GENDERS = ['Female', 'Male', 'Non-Binary'] as const;
+
 /** Playability values from the premade sims spreadsheet. */
 export const PLAYABILITY = [
   'Resident',

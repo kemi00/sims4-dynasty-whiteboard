@@ -24,7 +24,7 @@ import {
   householdPlace,
   simName,
 } from '../lib/connectionLog.ts';
-import { fileStamp, isUserE, migrateWhiteboardData, nextEidc, ageUpPatch, isLaterSimAge, partneredIdSet, sanitizeEdges, siblingsShareParents, worldColor } from '../lib/utils.ts';
+import { fileStamp, isUserE, migrateWhiteboardData, nextEidc, ageUpPatch, isLaterSimAge, partneredIdSet, randomNewSimGender, sanitizeEdges, siblingsShareParents, worldColor } from '../lib/utils.ts';
 import type {
   ConnSrc,
   DeceasedMark,
@@ -473,7 +473,7 @@ export function useWhiteboard() {
       sur: 'Sim',
       age: 'Young Adult',
       state: 'Sim',
-      gender: '-',
+      gender: randomNewSimGender(),
       hh,
       world,
       nb: neighbour,
@@ -746,7 +746,7 @@ export function useWhiteboard() {
         sur: 'Sim',
         age: 'Infant',
         state: 'Sim',
-        gender: '-',
+        gender: randomNewSimGender(),
         hh: dest.hh,
         world: dest.world,
         nb: dest.nb,

@@ -1,4 +1,4 @@
-import { AGES_H, DECEASED_STATE } from './constants.ts';
+import { AGES_H, DECEASED_STATE, NEW_SIM_GENDERS } from './constants.ts';
 import type {
   DeceasedMark,
   Edge,
@@ -199,6 +199,11 @@ export const cssesc = (s: string): string =>
 
 export function isPet(n: SimNode): boolean {
   return !!n.species || n.state === 'Pet';
+}
+
+export function randomNewSimGender(): (typeof NEW_SIM_GENDERS)[number] {
+  const i = Math.floor(Math.random() * NEW_SIM_GENDERS.length);
+  return NEW_SIM_GENDERS[i]!;
 }
 
 /** Next rung on AGES_H, or null when the age is unknown, last, or not a sim age. */
